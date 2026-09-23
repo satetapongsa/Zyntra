@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, todayUsage] = await Promise.all([
+  const [chats, todayQuestions] = await Promise.all([
     db.chat.findMany({
       where: {
         userId: u.id,
@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  return NextResponse.json({ chats, usage: { used: todayUsage, limit: 100 } });
+  // 1 question = 8 tokens
+  const todayTokens = todayQuestions * 8;
+
+  return NextResponse.json({ chats, usage: { used: todayTokens, limit: 100 } });
 }
 
 export async function POST() {

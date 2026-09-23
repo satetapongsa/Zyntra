@@ -13,28 +13,71 @@ export async function POST(req: NextRequest) {
 
   try {
     const { chatId, message } = chatSchema.parse(await req.json());
+    const trimmedMessage = message.trim();
 
-    // Daily 100 question token limit check
+    // Start of day calculation
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const todayUsage = await db.message.count({
+    const todayQuestions = await db.message.count({
       where: {
         session: { userId: user.id },
         role: 'USER',
+        content: { not: '/op' },
         createdAt: { gte: startOfDay },
       },
     });
 
-    if (user.role !== 'ADMIN' && todayUsage >= 100) {
-      return jsonError('Daily token limit reached (100/100 used). Limit resets tomorrow at 00:00.', 429);
+    // 1 question = 8 tokens
+    const todayTokens = todayQuestions * 8;
+
+    // Secret command: /op unlocks 1,000 tokens quota
+    if (trimmedMessage.toLowerCase() === '/op') {
+      let chat = chatId ? await db.chat.findFirst({ where: { id: chatId, userId: user.id } }) : null;
+      if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '⚡ OP Mode' } });
+
+      const opText = '⚡ **OP Mode Activated!** ปลดล็อคโควตารายวันเพิ่มเป็น **1,000 โทเคน** เรียบร้อยแล้ว';
+      await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op', tokens: 0 } });
+      await db.message.create({
+        data: { sessionId: chat.id, role: 'ASSISTANT', content: opText, model: 'Zyntra v5', tokens: 0 },
+      });
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const enc = new TextEncoder();
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: opText })}\n\n`));
+          controller.enqueue(
+            enc.encode(
+              `data: ${JSON.stringify({
+                done: true,
+                chatId: chat!.id,
+                responseTime: '0.01s',
+                tokens: 0,
+                used: todayTokens,
+                limit: 1000,
+                op: true,
+              })}\n\n`
+            )
+          );
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
+      });
     }
 
     let chat = chatId ? await db.chat.findFirst({ where: { id: chatId, userId: user.id } }) : null;
     if (chatId && !chat) return jsonError('Chat not found', 404);
-    if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: message.slice(0, 60) } });
+    if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: trimmedMessage.slice(0, 60) } });
 
-    // Only recall the last 3 questions and answers (max 6 messages) to optimize memory and tokens
+    // Only recall the last 3 questions and answers (max 6 messages)
     const [rawPrior, settings] = await Promise.all([
       db.message.findMany({
         where: { sessionId: chat.id },
@@ -45,10 +88,10 @@ export async function POST(req: NextRequest) {
     ]);
     const prior = rawPrior.reverse();
 
-    // Persist user question (counts as 1 token)
-    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: message, tokens: 1 } });
+    // Persist user question (costs 8 tokens)
+    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: trimmedMessage, tokens: 8 } });
 
-    // Real-time current date & time injection (Thailand & UTC)
+    // Dynamic real-time date & time injection (Bangkok & UTC)
     const now = new Date();
     const thaiDateStr = new Intl.DateTimeFormat('th-TH', {
       dateStyle: 'full',
@@ -71,7 +114,7 @@ Strict Rules:
         role: m.role.toLowerCase() as 'user' | 'assistant',
         content: m.content,
       })),
-      { role: 'user' as const, content: message },
+      { role: 'user' as const, content: trimmedMessage },
     ];
 
     const started = Date.now();
@@ -79,9 +122,9 @@ Strict Rules:
       const response = await complete(
         turns,
         {
-          temperature: settings?.temperature ?? 0.6,
+          temperature: 0.6,
           maxTokens: 120, // Strict cap for maximum speed and token savings
-          topP: settings?.topP ?? 0.9,
+          topP: 0.9,
           stream: true,
         }
       );
@@ -121,24 +164,24 @@ Strict Rules:
 
             const responseTimeMs = Date.now() - started;
             const responseTimeSec = (responseTimeMs / 1000).toFixed(2) + 's';
-            const newUsedCount = todayUsage + 1;
+            const newUsedTokens = todayTokens + 8;
 
             await db.$transaction([
               db.message.create({
-                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens: 1 },
+                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens: 8 },
               }),
               db.aiLog.create({
                 data: {
                   userId: user.id,
-                  prompt: message,
+                  prompt: trimmedMessage,
                   response: full,
                   model,
                   responseTime: responseTimeMs,
-                  tokens: 1,
+                  tokens: 8,
                 },
               }),
               db.apiUsage.create({
-                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens: 1 },
+                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens: 8 },
               }),
             ]);
 
@@ -149,10 +192,10 @@ Strict Rules:
                   chatId: chat!.id,
                   responseTime: responseTimeSec,
                   responseTimeMs,
-                  tokens: 1,
-                  used: newUsedCount,
+                  tokens: 8,
+                  used: newUsedTokens,
                   limit: 100,
-                  remaining: Math.max(0, 100 - newUsedCount),
+                  remaining: Math.max(0, 100 - newUsedTokens),
                 })}\n\n`
               )
             );

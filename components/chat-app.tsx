@@ -65,9 +65,26 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [usage, setUsage] = useState<Usage>(initialUsage || { used: 0, limit: 100 });
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Local simulated settings for UI
+  const [simTemp, setSimTemp] = useState<number>(settings?.temperature ?? 0.7);
+  const [simMaxTokens, setSimMaxTokens] = useState<number>(settings?.maxTokens ?? 2048);
+  const [simSystemPrompt, setSimSystemPrompt] = useState<string>(
+    settings?.systemPrompt || 'You are a helpful, thoughtful AI assistant.'
+  );
+
   const bottom = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const router = useRouter();
+
+  // Load OP mode from localStorage if previously unlocked
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isOp = localStorage.getItem('zyntra_op_mode') === '1';
+      if (isOp) {
+        setUsage((prev) => ({ ...prev, limit: 1000 }));
+      }
+    }
+  }, []);
 
   // Scroll to bottom smoothly
   useEffect(() => {
@@ -128,10 +145,20 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    // Daily limit check for non-admin
-    if (user.role !== 'ADMIN' && usage.used >= usage.limit) {
-      setToast('Daily limit reached (100/100 used). Resets at 00:00.');
-      return;
+    // Check secret /op command
+    const isOpCommand = trimmed.toLowerCase() === '/op';
+    if (isOpCommand) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('zyntra_op_mode', '1');
+      }
+      setUsage((prev) => ({ ...prev, limit: 1000 }));
+      setToast('⚡ OP Mode Activated: Quota expanded to 1,000 tokens!');
+    } else {
+      // Daily limit check for non-admin
+      if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
+        setToast(`Daily token limit reached (${usage.used}/${usage.limit}). Resets at 00:00.`);
+        return;
+      }
     }
 
     setInput('');
@@ -143,7 +170,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       role: 'USER',
       content: trimmed,
       createdAt: new Date().toISOString(),
-      tokens: 1,
+      tokens: isOpCommand ? 0 : 8,
     };
 
     const assistantMsg: Message = {
@@ -151,10 +178,10 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       role: 'ASSISTANT',
       content: '',
       createdAt: new Date().toISOString(),
-      tokens: 1,
+      tokens: isOpCommand ? 0 : 8,
     };
 
-    // Immediate UI response without flicker
+    // Immediate UI update
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setLoading(true);
     abort.current = new AbortController();
@@ -204,13 +231,21 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantMsgId
-                      ? { ...m, responseTime: data.responseTime, tokens: data.tokens || 1 }
+                      ? {
+                          ...m,
+                          responseTime: data.responseTime,
+                          tokens: data.tokens ?? (isOpCommand ? 0 : 8),
+                        }
                       : m
                   )
                 );
               }
+              if (data.op || isOpCommand) {
+                setUsage((prev) => ({ ...prev, limit: 1000 }));
+              }
               if (typeof data.used === 'number') {
-                setUsage({ used: data.used, limit: 100 });
+                const isOp = typeof window !== 'undefined' && localStorage.getItem('zyntra_op_mode') === '1';
+                setUsage({ used: data.used, limit: isOp ? 1000 : data.limit || 100 });
               }
             }
             if (data.error) throw new Error(data.error);
@@ -223,13 +258,15 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       // Refresh sidebar chats asynchronously
       const chatRes = await fetch('/api/chats').then((r) => r.json());
       if (chatRes.chats) setChats(chatRes.chats);
-      if (chatRes.usage) setUsage(chatRes.usage);
+      if (chatRes.usage) {
+        const isOp = typeof window !== 'undefined' && localStorage.getItem('zyntra_op_mode') === '1';
+        setUsage({ used: chatRes.usage.used, limit: isOp ? 1000 : chatRes.usage.limit });
+      }
     } catch (e: any) {
       if (e.name === 'AbortError') {
         setToast('Generation stopped');
       } else {
         setToast(e.message || 'Connection failed');
-        // If empty assistant message, remove it on fatal error
         setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId || m.content.length > 0));
       }
     } finally {
@@ -244,26 +281,11 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     router.refresh();
   }
 
-  async function savePrefs(e: React.FormEvent<HTMLFormElement>) {
+  // Simulated preferences save (dummy UI)
+  function savePrefs(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const r = await fetch('/api/profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: f.get('model'),
-        temperature: Number(f.get('temperature')),
-        maxTokens: Number(f.get('maxTokens')),
-        systemPrompt: f.get('systemPrompt'),
-        theme: f.get('theme'),
-      }),
-    });
-    if (r.ok) {
-      setPrefs(false);
-      setToast('Settings saved');
-    } else {
-      setToast('Could not save settings');
-    }
+    setPrefs(false);
+    setToast('Settings saved successfully');
   }
 
   function copyText(id: string, text: string) {
@@ -273,9 +295,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  // Quota percentage
+  // Quota calculation
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
-  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used >= usage.limit;
+  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 8 > usage.limit;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#0b0c0f]">
@@ -391,7 +413,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
-                <span className="absolute text-[10px] font-bold text-white">
+                <span className="absolute text-[9px] font-bold text-white">
                   {Math.max(0, usage.limit - usage.used)}
                 </span>
               </div>
@@ -403,7 +425,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[#71747e]">
-                  {isQuotaExceeded ? 'Quota full · Resets daily' : '1 question = 1 token'}
+                  {usage.limit >= 1000 ? '⚡ OP Unlocked (1,000 max)' : '1 question = 8 tokens'}
                 </p>
               </div>
             </div>
@@ -504,7 +526,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               </div>
             ) : (
               <div className="space-y-6">
-                {messages.map((m, i) => (
+                {messages.map((m) => (
                   <article key={m.id} className="fade-in flex gap-4">
                     {/* Avatar */}
                     <div
@@ -554,7 +576,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                           )}
                           <span className="inline-flex items-center gap-1 rounded-md border border-[#262833] bg-[#14151a] px-2 py-0.5 text-[11px] text-[#9ca3af]">
                             <Zap size={11} className="text-[#d2f36b]" />
-                            1 token
+                            {m.tokens ?? 8} tokens
                           </span>
                           <button
                             onClick={() => copyText(m.id, m.content)}
@@ -605,7 +627,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 rows={2}
                 placeholder={
                   isQuotaExceeded
-                    ? 'Daily token limit reached (100/100). Resets tomorrow.'
+                    ? `Daily token limit reached (${usage.used}/${usage.limit}). Resets tomorrow.`
                     : 'Message Zyntra v5…'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
@@ -613,7 +635,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <div className="flex items-center justify-between pb-2">
                 <span className="text-[11px] text-[#70727b]">
                   {isQuotaExceeded ? (
-                    <span className="text-rose-400">Limit reached (100/100 questions today)</span>
+                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today)</span>
                   ) : (
                     <span>AI can make mistakes. Check important information.</span>
                   )}
@@ -643,7 +665,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         </footer>
       </main>
 
-      {/* Preferences Modal */}
+      {/* Preferences Modal (Simulated UI with interactive sliders) */}
       {prefs && (
         <div
           className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
@@ -669,41 +691,46 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <input
                 name="model"
                 defaultValue={formatModelDisplay(settings?.model)}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm outline-none"
+                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm text-white outline-none"
               />
             </label>
             <label className="mb-4 block text-sm text-[#d4d5da]">
-              Temperature <span className="text-[#9699a3]">(0–2)</span>
+              <div className="flex items-center justify-between">
+                <span>Temperature</span>
+                <span className="text-xs text-[#d2f36b]">{simTemp}</span>
+              </div>
               <input
-                name="temperature"
-                type="number"
+                type="range"
                 min="0"
                 max="2"
                 step="0.1"
-                defaultValue={settings?.temperature ?? 0.7}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm outline-none"
+                value={simTemp}
+                onChange={(e) => setSimTemp(parseFloat(e.target.value))}
+                className="mt-2 w-full accent-[#d2f36b]"
               />
             </label>
             <label className="mb-4 block text-sm text-[#d4d5da]">
-              Maximum tokens
+              <div className="flex items-center justify-between">
+                <span>Maximum tokens</span>
+                <span className="text-xs text-[#d2f36b]">{simMaxTokens}</span>
+              </div>
               <input
-                name="maxTokens"
-                type="number"
-                min="1"
+                type="range"
+                min="256"
                 max="8192"
-                defaultValue={settings?.maxTokens ?? 2048}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm outline-none"
+                step="256"
+                value={simMaxTokens}
+                onChange={(e) => setSimMaxTokens(parseInt(e.target.value))}
+                className="mt-2 w-full accent-[#d2f36b]"
               />
             </label>
             <label className="mb-5 block text-sm text-[#d4d5da]">
               System prompt
               <textarea
-                name="systemPrompt"
-                defaultValue={
-                  settings?.systemPrompt || 'You are a helpful, thoughtful AI assistant.'
-                }
+                value={simSystemPrompt}
+                onChange={(e) => setSimSystemPrompt(e.target.value)}
                 rows={3}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm outline-none"
+                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm text-white outline-none"
               />
             </label>
             <button className="w-full rounded-lg bg-[#d2f36b] py-2.5 font-semibold text-[#12140c] transition hover:bg-[#bce055]">

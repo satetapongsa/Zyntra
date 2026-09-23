@@ -27,7 +27,7 @@ export default async function Home() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, settings, todayUsage] = await Promise.all([
+  const [chats, settings, todayQuestions] = await Promise.all([
     db.chat.findMany({
       where: { userId: user.id },
       orderBy: [{ pinned: 'desc' }, { updatedAt: 'desc' }],
@@ -44,12 +44,15 @@ export default async function Home() {
     }),
   ]);
 
+  // 1 question = 8 tokens
+  const todayTokens = todayQuestions * 8;
+
   return (
     <ChatApp
       user={user}
       initialChats={chats}
       settings={settings}
-      initialUsage={{ used: todayUsage, limit: 100 }}
+      initialUsage={{ used: todayTokens, limit: 100 }}
     />
   );
 }
