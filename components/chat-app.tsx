@@ -156,13 +156,13 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         localStorage.setItem('zyntra_op_mode', '1');
       }
       setUsage((prev) => ({ ...prev, limit: 1000 }));
-      setToast('⚡ OP Mode: ON');
+      setToast('OP Mode: ON');
     } else if (isOpOff) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('zyntra_op_mode');
       }
       setUsage((prev) => ({ ...prev, limit: 100 }));
-      setToast('🔒 OP Mode: OFF');
+      setToast('OP Mode: OFF');
     } else {
       // Daily limit check for non-admin
       if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
@@ -451,7 +451,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[#71747e]">
-                  {usage.limit >= 1000 ? '⚡ OP Unlocked (1,000 max)' : '1 question = 8 tokens'}
+                  {usage.limit >= 1000 ? 'OP Mode (1,000 max)' : '1 question = 8 tokens'}
                 </p>
               </div>
             </div>
