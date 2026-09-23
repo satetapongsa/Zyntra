@@ -156,17 +156,17 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         localStorage.setItem('zyntra_op_mode', '1');
       }
       setUsage((prev) => ({ ...prev, limit: 1000 }));
-      setToast('⚡ OP Mode: ON (โควตา 1,000 โทเคน / ตอบสูงสุด 300 ตัวอักษร)');
+      setToast('⚡ OP Mode: ON');
     } else if (isOpOff) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('zyntra_op_mode');
       }
       setUsage((prev) => ({ ...prev, limit: 100 }));
-      setToast('🔒 OP Mode: OFF (โควตา 100 โทเคน / ตอบสูงสุด 200 ตัวอักษร)');
+      setToast('🔒 OP Mode: OFF');
     } else {
       // Daily limit check for non-admin
       if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
-        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด OP)');
+        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้');
         return;
       }
     }
@@ -653,7 +653,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 rows={2}
                 placeholder={
                   isQuotaExceeded
-                    ? 'โควต้าหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด)...'
+                    ? 'Daily token limit reached. Resets at 00:00.'
                     : 'Message Zyntra v5…'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
@@ -661,7 +661,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <div className="flex items-center justify-between pb-2">
                 <span className="text-[11px] text-[#70727b]">
                   {isQuotaExceeded ? (
-                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today) · พิมพ์ /op on เพื่อเปิดโหมด OP</span>
+                    <span className="text-rose-400">Daily limit reached ({usage.used}/{usage.limit} tokens today)</span>
                   ) : (
                     <span>AI can make mistakes. Check important information.</span>
                   )}

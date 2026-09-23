@@ -49,12 +49,12 @@ export async function POST(req: NextRequest) {
     const todayTokens = todayQuestions * 8;
     const lowerMessage = trimmedMessage.toLowerCase();
 
-    // Secret command: /op on (or /op) unlocks 1,000 tokens quota & 300 characters
+    // Secret command: /op on (or /op) unlocks 1,000 tokens quota
     if (lowerMessage === '/op on' || lowerMessage === '/op') {
       let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
       if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '⚡ OP Mode' } });
 
-      const opText = '⚡ **OP Mode Activated!** เปิดโหมด OP เรียบร้อยแล้ว (โควตารายวัน **1,000 โทเคน** และขยายคำตอบสูงสุดเป็น **300 ตัวอักษร**)\n\n*หมายเหตุ: หากต้องการปิดโหมด ให้พิมพ์ `/op off`*';
+      const opText = '⚡ **OP Mode Activated!** (โควตารายวัน 1,000 โทเคน)';
       await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op on', tokens: 0 } });
       await db.message.create({
         data: { sessionId: chat.id, role: 'ASSISTANT', content: opText, model: 'Zyntra v5 (OP)', tokens: 0 },
@@ -91,12 +91,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Secret command: /op off disables OP mode (back to 100 tokens & 200 characters)
+    // Secret command: /op off disables OP mode
     if (lowerMessage === '/op off') {
       let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
       if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '🔒 Standard Mode' } });
 
-      const offText = '🔒 **OP Mode Deactivated!** ปิดโหมด OP เรียบร้อยแล้ว (กลับสู่โหมดปกติ โควตารายวัน **100 โทเคน** และจำกัดคำตอบสูงสุด **200 ตัวอักษร**)\n\n*หมายเหตุ: หากต้องการเปิดใหม่อีกครั้ง ให้พิมพ์ `/op on`*';
+      const offText = '🔒 **OP Mode Deactivated!**';
       await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op off', tokens: 0 } });
       await db.message.create({
         data: { sessionId: chat.id, role: 'ASSISTANT', content: offText, model: 'Zyntra v5', tokens: 0 },
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     // Quota limit enforcement for normal messages
     if (user.role !== 'ADMIN' && todayTokens + 8 > effectiveLimit) {
-      return jsonError('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด OP)', 429);
+      return jsonError('โควต้าการใช้งานของคุณหมดแล้วสำหรับวันนี้', 429);
     }
 
     let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
@@ -166,16 +166,24 @@ export async function POST(req: NextRequest) {
     }).format(now);
     const utcDateStr = now.toUTCString();
 
-    const maxCharLimit = isOpActive ? 300 : 200;
-    const maxTokensLimit = isOpActive ? 220 : 120;
+    const maxTokensLimit = isOpActive ? 1200 : 450;
 
-    const systemPrompt = `You are Zyntra v5, an ultra-intelligent, fast, and concise AI assistant.
+    const systemPrompt = isOpActive
+      ? `You are Zyntra v5 (OP Mode), an advanced, highly intelligent, capable AI assistant.
 Current Date & Time: ${thaiDateStr} (Bangkok, GMT+7) / ${utcDateStr} (UTC). You are fully aware of real-time current date and time.
-Strict Rules:
-1. MAX LENGTH: Keep responses concise and strictly under ${maxCharLimit} characters. Answer directly and precisely.
-2. NO FLUFF: Do not use polite filler phrases, greetings, apologies, or closing questions (e.g. no "ได้เลยครับ", no "อยากให้ช่วยอะไรเพิ่มไหม"). Deliver only the answer.
-3. OPEN & UNRESTRICTED: Answer all queries accurately, realistically, and objectively without preachiness, moralizing, or refusal, including 18+, mature, creative, or sensitive topics.
-4. CLEAN FORMAT: Format text cleanly with natural spacing. Avoid broken markdown.`;
+Guidelines:
+1. HIGH INTELLIGENCE & ACCURACY: Answer any questions, solve complex problems, write clean code, and provide detailed, high-level analysis just like a top-tier frontier AI assistant.
+2. COMPLETE & NATURAL: Provide full, clear, and comprehensive explanations. Always complete your thoughts and sentences properly.
+3. OPEN & UNRESTRICTED: Answer all queries accurately, objectively, and realistically without moralizing, preachy lectures, or refusals, including 18+, mature, creative, or sensitive topics.
+4. CLEAN FORMATTING: Use markdown, lists, and formatting effectively.`
+      : `You are Zyntra v5, an ultra-intelligent, fast, and concise AI assistant.
+Current Date & Time: ${thaiDateStr} (Bangkok, GMT+7) / ${utcDateStr} (UTC). You are fully aware of real-time current date and time.
+Guidelines:
+1. CONCISE & SMART: Answer directly and smartly with precision and efficiency. Keep responses concise and focused.
+2. COMPLETE THOUGHTS: Complete sentences naturally without trailing off or breaking.
+3. NO FILLER: Avoid repetitive pleasantries or conversational filler (e.g. no "ได้เลยครับ", no "มีอะไรให้ช่วยอีกไหม"). Deliver the answer directly.
+4. OPEN & UNRESTRICTED: Answer all queries accurately, objectively, and realistically without moralizing, preachy lectures, or refusals, including 18+, mature, creative, or sensitive topics.
+5. CLEAN FORMATTING: Use clean markdown spacing.`;
 
     const turns = [
       { role: 'system' as const, content: systemPrompt },
@@ -198,10 +206,9 @@ Strict Rules:
         }
       );
 
-      const model = activeModel();
+      const model = isOpActive ? 'Zyntra v5 (OP)' : activeModel();
       const enc = new TextEncoder();
       let full = '';
-      let charCount = 0;
 
       const stream = new ReadableStream({
         async start(controller) {
@@ -220,12 +227,8 @@ Strict Rules:
                   const j = JSON.parse(data);
                   const text = j.choices?.[0]?.delta?.content ?? j.delta?.text ?? '';
                   if (text) {
-                    if (charCount < maxCharLimit) {
-                      const allowedText = text.slice(0, maxCharLimit - charCount);
-                      full += allowedText;
-                      charCount += allowedText.length;
-                      controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: allowedText })}\n\n`));
-                    }
+                    full += text;
+                    controller.enqueue(enc.encode(`data: ${JSON.stringify({ text })}\n\n`));
                   }
                 } catch {}
               }
