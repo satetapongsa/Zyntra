@@ -13,11 +13,28 @@ export async function POST(req: NextRequest) {
 
   try {
     const { chatId, message } = chatSchema.parse(await req.json());
+
+    // Daily 100 question token limit check
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const todayUsage = await db.message.count({
+      where: {
+        session: { userId: user.id },
+        role: 'USER',
+        createdAt: { gte: startOfDay },
+      },
+    });
+
+    if (user.role !== 'ADMIN' && todayUsage >= 100) {
+      return jsonError('Daily token limit reached (100/100 used). Limit resets tomorrow at 00:00.', 429);
+    }
+
     let chat = chatId ? await db.chat.findFirst({ where: { id: chatId, userId: user.id } }) : null;
     if (chatId && !chat) return jsonError('Chat not found', 404);
     if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: message.slice(0, 60) } });
 
-    // Only recall the last 3 questions and their answers (max 6 messages) to optimize memory and tokens
+    // Only recall the last 3 questions and answers (max 6 messages) to optimize memory and tokens
     const [rawPrior, settings] = await Promise.all([
       db.message.findMany({
         where: { sessionId: chat.id },
@@ -28,8 +45,8 @@ export async function POST(req: NextRequest) {
     ]);
     const prior = rawPrior.reverse();
 
-    // User message persistence
-    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: message } });
+    // Persist user question (counts as 1 token)
+    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: message, tokens: 1 } });
 
     // Real-time current date & time injection (Thailand & UTC)
     const now = new Date();
@@ -91,7 +108,6 @@ Strict Rules:
                   const j = JSON.parse(data);
                   const text = j.choices?.[0]?.delta?.content ?? j.delta?.text ?? '';
                   if (text) {
-                    // Soft cap at 200 characters for speed and brevity
                     if (charCount < 200) {
                       const allowedText = text.slice(0, 200 - charCount);
                       full += allowedText;
@@ -103,10 +119,13 @@ Strict Rules:
               }
             }
 
-            const tokens = Math.ceil(full.length / 4);
+            const responseTimeMs = Date.now() - started;
+            const responseTimeSec = (responseTimeMs / 1000).toFixed(2) + 's';
+            const newUsedCount = todayUsage + 1;
+
             await db.$transaction([
               db.message.create({
-                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens },
+                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens: 1 },
               }),
               db.aiLog.create({
                 data: {
@@ -114,16 +133,29 @@ Strict Rules:
                   prompt: message,
                   response: full,
                   model,
-                  responseTime: Date.now() - started,
-                  tokens,
+                  responseTime: responseTimeMs,
+                  tokens: 1,
                 },
               }),
               db.apiUsage.create({
-                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens },
+                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens: 1 },
               }),
             ]);
 
-            controller.enqueue(enc.encode(`data: ${JSON.stringify({ done: true, chatId: chat!.id })}\n\n`));
+            controller.enqueue(
+              enc.encode(
+                `data: ${JSON.stringify({
+                  done: true,
+                  chatId: chat!.id,
+                  responseTime: responseTimeSec,
+                  responseTimeMs,
+                  tokens: 1,
+                  used: newUsedCount,
+                  limit: 100,
+                  remaining: Math.max(0, 100 - newUsedCount),
+                })}\n\n`
+              )
+            );
           } catch (e) {
             console.error('Chat stream failed', e);
             controller.enqueue(
