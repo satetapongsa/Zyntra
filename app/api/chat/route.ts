@@ -12,8 +12,10 @@ export async function POST(req: NextRequest) {
   if (!user || user.banned) return jsonError('Please sign in to chat', 401);
 
   try {
-    const { chatId, message } = chatSchema.parse(await req.json());
+    const rawBody = await req.json();
+    const { chatId, message } = chatSchema.parse(rawBody);
     const trimmedMessage = message.trim();
+    const validChatId = chatId && chatId.trim() ? chatId.trim() : null;
 
     // Start of day calculation
     const startOfDay = new Date();
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Secret command: /op unlocks 1,000 tokens quota
     if (trimmedMessage.toLowerCase() === '/op') {
-      let chat = chatId ? await db.chat.findFirst({ where: { id: chatId, userId: user.id } }) : null;
+      let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
       if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '⚡ OP Mode' } });
 
       const opText = '⚡ **OP Mode Activated!** ปลดล็อคโควตารายวันเพิ่มเป็น **1,000 โทเคน** เรียบร้อยแล้ว';
@@ -73,18 +75,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    let chat = chatId ? await db.chat.findFirst({ where: { id: chatId, userId: user.id } }) : null;
-    if (chatId && !chat) return jsonError('Chat not found', 404);
+    let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
+    if (validChatId && !chat) return jsonError('Chat not found', 404);
     if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: trimmedMessage.slice(0, 60) } });
 
     // Only recall the last 3 questions and answers (max 6 messages)
-    const [rawPrior, settings] = await Promise.all([
+    const [rawPrior] = await Promise.all([
       db.message.findMany({
         where: { sessionId: chat.id },
         orderBy: { createdAt: 'desc' },
         take: 6,
       }),
-      db.setting.findUnique({ where: { userId: user.id } }),
     ]);
     const prior = rawPrior.reverse();
 
@@ -222,7 +223,8 @@ Strict Rules:
       console.error('Chat request failed', e);
       return jsonError(e instanceof Error ? e.message : 'Unable to contact AI provider', 502);
     }
-  } catch {
-    return jsonError('Invalid chat request');
+  } catch (err: any) {
+    console.error('Chat API Error:', err);
+    return jsonError(err?.message || 'Invalid chat request', 400);
   }
 }

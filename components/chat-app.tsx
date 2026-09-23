@@ -190,7 +190,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: active, message: trimmed }),
+        body: JSON.stringify({ chatId: active || undefined, message: trimmed }),
         signal: abort.current.signal,
       });
 
@@ -295,9 +295,24 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  // Quota calculation
+  // Quota calculation & dynamic progressive colors
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
   const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 8 > usage.limit;
+
+  // Progressive color: Green -> Yellow -> Orange -> Red
+  const getRingColor = () => {
+    if (isQuotaExceeded || quotaPercent >= 90) return 'text-rose-500';
+    if (quotaPercent >= 75) return 'text-orange-400';
+    if (quotaPercent >= 50) return 'text-yellow-400';
+    return 'text-[#d2f36b]';
+  };
+
+  const getNumberColor = () => {
+    if (isQuotaExceeded || quotaPercent >= 90) return 'text-rose-400';
+    if (quotaPercent >= 75) return 'text-orange-300';
+    if (quotaPercent >= 50) return 'text-yellow-300';
+    return 'text-white';
+  };
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#0b0c0f]">
@@ -387,7 +402,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
             ))}
           </div>
 
-          {/* Daily Quota Donut Ring */}
+          {/* Daily Quota Donut Ring with Progressive Color Shift */}
           <div className="mx-3 mb-2 rounded-xl border border-[#23252b] bg-[#14151a] p-3">
             <div className="flex items-center gap-3">
               <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
@@ -400,11 +415,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                   <path
-                    className={
-                      isQuotaExceeded
-                        ? 'text-rose-500 transition-all duration-500'
-                        : 'text-[#d2f36b] transition-all duration-500'
-                    }
+                    className={`${getRingColor()} transition-all duration-500`}
                     strokeDasharray={`${quotaPercent}, 100`}
                     strokeWidth="3.5"
                     strokeLinecap="round"
@@ -413,7 +424,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
-                <span className="absolute text-[9px] font-bold text-white">
+                <span className={`absolute text-[9px] font-bold ${getNumberColor()} transition-colors duration-300`}>
                   {Math.max(0, usage.limit - usage.used)}
                 </span>
               </div>
