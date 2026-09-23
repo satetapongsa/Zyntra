@@ -1,4 +1,4 @@
-# Converse AI
+# Zyntra
 
 A self-hosted AI chat workspace built with Next.js App Router, TypeScript, Prisma, PostgreSQL and server-side AI provider adapters.
 
