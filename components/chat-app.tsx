@@ -156,7 +156,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     } else {
       // Daily limit check for non-admin
       if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
-        setToast(`Daily token limit reached (${usage.used}/${usage.limit}). Resets at 00:00.`);
+        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)');
         return;
       }
     }
@@ -634,11 +634,11 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     send();
                   }
                 }}
-                disabled={isQuotaExceeded}
+                disabled={loading}
                 rows={2}
                 placeholder={
                   isQuotaExceeded
-                    ? `Daily token limit reached (${usage.used}/${usage.limit}). Resets tomorrow.`
+                    ? 'โควต้าหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)...'
                     : 'Message Zyntra v5…'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
@@ -646,7 +646,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <div className="flex items-center justify-between pb-2">
                 <span className="text-[11px] text-[#70727b]">
                   {isQuotaExceeded ? (
-                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today)</span>
+                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today) · พิมพ์ /op เพื่อปลดล็อค</span>
                   ) : (
                     <span>AI can make mistakes. Check important information.</span>
                   )}
@@ -661,7 +661,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   </button>
                 ) : (
                   <button
-                    disabled={!input.trim() || isQuotaExceeded}
+                    disabled={!input.trim() || loading}
                     className="flex items-center justify-center rounded-lg bg-[#d2f36b] p-2 text-[#12140c] transition disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Send size={15} />

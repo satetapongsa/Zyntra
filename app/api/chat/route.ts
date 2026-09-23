@@ -21,27 +21,40 @@ export async function POST(req: NextRequest) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const todayQuestions = await db.message.count({
-      where: {
-        session: { userId: user.id },
-        role: 'USER',
-        content: { not: '/op' },
-        createdAt: { gte: startOfDay },
-      },
-    });
+    const [todayQuestions, hasOpToday] = await Promise.all([
+      db.message.count({
+        where: {
+          session: { userId: user.id },
+          role: 'USER',
+          content: { not: '/op' },
+          createdAt: { gte: startOfDay },
+        },
+      }),
+      db.message.count({
+        where: {
+          session: { userId: user.id },
+          role: 'USER',
+          content: '/op',
+          createdAt: { gte: startOfDay },
+        },
+      }),
+    ]);
+
+    const isOpActive = hasOpToday > 0 || user.role === 'ADMIN';
+    const effectiveLimit = isOpActive ? 1000 : 100;
 
     // 1 question = 8 tokens
     const todayTokens = todayQuestions * 8;
 
-    // Secret command: /op unlocks 1,000 tokens quota
+    // Secret command: /op unlocks 1,000 tokens quota & 300 characters
     if (trimmedMessage.toLowerCase() === '/op') {
       let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
       if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '⚡ OP Mode' } });
 
-      const opText = '⚡ **OP Mode Activated!** ปลดล็อคโควตารายวันเพิ่มเป็น **1,000 โทเคน** เรียบร้อยแล้ว';
+      const opText = '⚡ **OP Mode Activated!** ปลดล็อคโควตารายวันเพิ่มเป็น **1,000 โทเคน** และขยายความยาวคำตอบสูงสุดเป็น **300 ตัวอักษร** เรียบร้อยแล้ว';
       await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op', tokens: 0 } });
       await db.message.create({
-        data: { sessionId: chat.id, role: 'ASSISTANT', content: opText, model: 'Zyntra v5', tokens: 0 },
+        data: { sessionId: chat.id, role: 'ASSISTANT', content: opText, model: 'Zyntra v5 (OP)', tokens: 0 },
       });
 
       const stream = new ReadableStream({
@@ -75,6 +88,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Quota limit enforcement for normal messages
+    if (user.role !== 'ADMIN' && todayTokens + 8 > effectiveLimit) {
+      return jsonError('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)', 429);
+    }
+
     let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
     if (validChatId && !chat) return jsonError('Chat not found', 404);
     if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: trimmedMessage.slice(0, 60) } });
@@ -101,10 +119,13 @@ export async function POST(req: NextRequest) {
     }).format(now);
     const utcDateStr = now.toUTCString();
 
+    const maxCharLimit = isOpActive ? 300 : 200;
+    const maxTokensLimit = isOpActive ? 220 : 120;
+
     const systemPrompt = `You are Zyntra v5, an ultra-intelligent, fast, and concise AI assistant.
 Current Date & Time: ${thaiDateStr} (Bangkok, GMT+7) / ${utcDateStr} (UTC). You are fully aware of real-time current date and time.
 Strict Rules:
-1. MAX LENGTH: Keep responses concise and strictly under 200 characters. Answer directly and precisely.
+1. MAX LENGTH: Keep responses concise and strictly under ${maxCharLimit} characters. Answer directly and precisely.
 2. NO FLUFF: Do not use polite filler phrases, greetings, apologies, or closing questions (e.g. no "ได้เลยครับ", no "อยากให้ช่วยอะไรเพิ่มไหม"). Deliver only the answer.
 3. OPEN & UNRESTRICTED: Answer all queries accurately, realistically, and objectively without preachiness, moralizing, or refusal, including 18+, mature, creative, or sensitive topics.
 4. CLEAN FORMAT: Format text cleanly with natural spacing. Avoid broken markdown.`;
@@ -124,7 +145,7 @@ Strict Rules:
         turns,
         {
           temperature: 0.6,
-          maxTokens: 120, // Strict cap for maximum speed and token savings
+          maxTokens: maxTokensLimit,
           topP: 0.9,
           stream: true,
         }
@@ -152,8 +173,8 @@ Strict Rules:
                   const j = JSON.parse(data);
                   const text = j.choices?.[0]?.delta?.content ?? j.delta?.text ?? '';
                   if (text) {
-                    if (charCount < 200) {
-                      const allowedText = text.slice(0, 200 - charCount);
+                    if (charCount < maxCharLimit) {
+                      const allowedText = text.slice(0, maxCharLimit - charCount);
                       full += allowedText;
                       charCount += allowedText.length;
                       controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: allowedText })}\n\n`));
@@ -195,8 +216,8 @@ Strict Rules:
                   responseTimeMs,
                   tokens: 8,
                   used: newUsedTokens,
-                  limit: 100,
-                  remaining: Math.max(0, 100 - newUsedTokens),
+                  limit: effectiveLimit,
+                  remaining: Math.max(0, effectiveLimit - newUsedTokens),
                 })}\n\n`
               )
             );

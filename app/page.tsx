@@ -27,7 +27,7 @@ export default async function Home() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, settings, todayQuestions] = await Promise.all([
+  const [chats, settings, todayQuestions, hasOpToday] = await Promise.all([
     db.chat.findMany({
       where: { userId: user.id },
       orderBy: [{ pinned: 'desc' }, { updatedAt: 'desc' }],
@@ -39,12 +39,21 @@ export default async function Home() {
       where: {
         session: { userId: user.id },
         role: 'USER',
+        content: { not: '/op' },
+        createdAt: { gte: startOfDay },
+      },
+    }),
+    db.message.count({
+      where: {
+        session: { userId: user.id },
+        role: 'USER',
+        content: '/op',
         createdAt: { gte: startOfDay },
       },
     }),
   ]);
 
-  // 1 question = 8 tokens
+  const isOp = hasOpToday > 0 || user.role === 'ADMIN';
   const todayTokens = todayQuestions * 8;
 
   return (
@@ -52,7 +61,7 @@ export default async function Home() {
       user={user}
       initialChats={chats}
       settings={settings}
-      initialUsage={{ used: todayTokens, limit: 100 }}
+      initialUsage={{ used: todayTokens, limit: isOp ? 1000 : 100 }}
     />
   );
 }
