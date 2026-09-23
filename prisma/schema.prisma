@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  password String
+  role Role @default(USER)
+  banned Boolean @default(false)
+  avatar String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chats Chat[]
+  logs AiLog[]
+  usage ApiUsage[]
+  settings Setting?
+}
+model Chat {
+  id String @id @default(cuid())
+  title String @default("New chat")
+  pinned Boolean @default(false)
+  favorite Boolean @default(false)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId, updatedAt])
+}
+model Message {
+  id String @id @default(cuid())
+  sessionId String
+  session Chat @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role MessageRole
+  content String @db.Text
+  model String?
+  tokens Int @default(0)
+  createdAt DateTime @default(now())
+  @@index([sessionId, createdAt])
+}
+model AiLog {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prompt String @db.Text
+  response String @db.Text
+  model String
+  responseTime Int
+  tokens Int @default(0)
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+model ApiUsage {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider String
+  tokens Int @default(0)
+  cost Float @default(0)
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+model Setting {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme String @default("dark")
+  model String @default("deepseek-chat")
+  temperature Float @default(0.7)
+  language String @default("en")
+  maxTokens Int @default(2048)
+  topP Float @default(1)
+  systemPrompt String @default("You are a helpful, thoughtful AI assistant.") @db.Text
+}

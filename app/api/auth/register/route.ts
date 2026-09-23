@@ -1,0 +1,4 @@
+import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
+import { db } from '@/lib/db'; import { registerSchema } from '@/lib/schemas'; import { issueToken } from '@/lib/auth'; import { jsonError, setSession } from '@/lib/http';
+export async function POST(req: NextRequest) { try { const data=registerSchema.parse(await req.json()); const email=data.email.toLowerCase(); if(await db.user.findUnique({where:{email}})) return jsonError('An account with this email already exists',409); const user=await db.user.create({data:{name:data.name,email,password:await bcrypt.hash(data.password,12),settings:{create:{}}},select:{id:true,name:true,email:true,role:true}}); return setSession(NextResponse.json({user}),await issueToken(user.id)); } catch(e) { return jsonError(e instanceof Error&&e.name==='ZodError'?'Please check your details':'Could not create account',400); } }
