@@ -51,6 +51,63 @@ const formatModelDisplay = (m?: string) => {
   return m;
 };
 
+function CodeBlock({ node, inline, className, children, ...props }: any) {
+  const match = /language-(\w+)/.exec(className || '');
+  const lang = match ? match[1] : '';
+  const codeContent = String(children).replace(/\n$/, '');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isMultiLine = codeContent.includes('\n');
+
+  if (!inline && (match || isMultiLine)) {
+    return (
+      <div className="my-3 overflow-hidden rounded-xl border border-[#272932] bg-[#0c0d11] text-sm shadow-lg">
+        <div className="flex items-center justify-between border-b border-[#21232b] bg-[#15161c] px-3.5 py-1.5 text-xs text-[#8f929d]">
+          <span className="font-mono text-[11px] font-medium lowercase tracking-wider text-[#a5a8b5]">
+            {lang || 'code'}
+          </span>
+          <button
+            onClick={handleCopy}
+            type="button"
+            className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-[#8e929f] transition hover:bg-[#23252e] hover:text-white"
+          >
+            {copied ? (
+              <>
+                <Check size={12} className="text-[#d2f36b]" />
+                <span className="text-[#d2f36b]">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={12} />
+                <span>Copy code</span>
+              </>
+            )}
+          </button>
+        </div>
+        <div className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-[#e6e8ee]">
+          <pre className="!bg-transparent !p-0 !m-0">
+            <code className={className} {...props}>
+              {children}
+            </code>
+          </pre>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <code className="rounded bg-[#1a1c23] px-1.5 py-0.5 font-mono text-[13px] text-[#e0e2e8] border border-[#282a35]" {...props}>
+      {children}
+    </code>
+  );
+}
+
 export default function ChatApp({ user, initialChats, settings, initialUsage }: Props) {
   const [chats, setChats] = useState<Chat[]>(initialChats);
   const [active, setActive] = useState<string | null>(null);
@@ -578,7 +635,14 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
                       {m.content ? (
                         <div className="prose text-[14px] text-[#e2e3e7]">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code: CodeBlock,
+                            }}
+                          >
+                            {m.content}
+                          </ReactMarkdown>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 py-2">
