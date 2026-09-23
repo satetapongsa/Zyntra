@@ -1,3 +1,145 @@
 @import "tailwindcss";
-:root{color-scheme:dark;--bg:#0b0c0f;--panel:#111318;--line:#23252b;--muted:#9699a3;--text:#f3f3f5;--accent:#d2f36b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}button,input,textarea,select{font:inherit}button{cursor:pointer}.chat-scroll::-webkit-scrollbar{width:6px}.chat-scroll::-webkit-scrollbar-thumb{background:#30323a;border-radius:8px} .prose pre{overflow:auto;background:#17191e;border:1px solid var(--line);border-radius:10px;padding:14px}.prose code{background:#202228;border-radius:4px;padding:2px 5px;font-size:.9em}.prose p{line-height:1.75}.fade-in{animation:fade .3s ease-out}@keyframes fade{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0c0f;
+  --panel: #111318;
+  --line: #23252b;
+  --muted: #9699a3;
+  --text: #f3f3f5;
+  --accent: #d2f36b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: #30323a;
+  border-radius: 8px;
+}
+
+/* Polished Prose / Markdown Styling */
+.prose {
+  line-height: 1.65;
+  color: #e2e3e7;
+  word-break: break-word;
+}
+
+.prose p {
+  margin: 0.4rem 0;
+}
+
+.prose p:first-child {
+  margin-top: 0;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: #ffffff;
+  font-weight: 600;
+  margin: 0.8rem 0 0.4rem 0;
+  line-height: 1.3;
+}
+
+.prose h1 { font-size: 1.25rem; }
+.prose h2 { font-size: 1.15rem; }
+.prose h3 { font-size: 1.05rem; }
+
+.prose ul, .prose ol {
+  margin: 0.4rem 0;
+  padding-left: 1.35rem;
+}
+
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+
+.prose li {
+  margin: 0.2rem 0;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid #282a32;
+  margin: 0.8rem 0;
+}
+
+.prose pre {
+  overflow-x: auto;
+  background: #14161b;
+  border: 1px solid #282b33;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0.6rem 0;
+}
+
+.prose code {
+  background: #1e2027;
+  border: 1px solid #2d3039;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.prose pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.prose blockquote {
+  border-left: 3px solid #d2f36b;
+  padding-left: 10px;
+  margin: 0.5rem 0;
+  color: #9ea0aa;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+}
+
+.prose th, .prose td {
+  border: 1px solid #282a32;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.prose th {
+  background: #16181e;
+  font-weight: 600;
+}
+
+.fade-in {
+  animation: fade .25s ease-out;
+}
+
+@keyframes fade {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
