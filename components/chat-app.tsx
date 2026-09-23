@@ -145,18 +145,28 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    // Check secret /op command
-    const isOpCommand = trimmed.toLowerCase() === '/op';
-    if (isOpCommand) {
+    // Check secret /op commands
+    const lower = trimmed.toLowerCase();
+    const isOpOn = lower === '/op on' || lower === '/op';
+    const isOpOff = lower === '/op off';
+    const isOpCommand = isOpOn || isOpOff;
+
+    if (isOpOn) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('zyntra_op_mode', '1');
       }
       setUsage((prev) => ({ ...prev, limit: 1000 }));
-      setToast('⚡ OP Mode Activated: Quota expanded to 1,000 tokens!');
+      setToast('⚡ OP Mode: ON (โควตา 1,000 โทเคน / ตอบสูงสุด 300 ตัวอักษร)');
+    } else if (isOpOff) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('zyntra_op_mode');
+      }
+      setUsage((prev) => ({ ...prev, limit: 100 }));
+      setToast('🔒 OP Mode: OFF (โควตา 100 โทเคน / ตอบสูงสุด 200 ตัวอักษร)');
     } else {
       // Daily limit check for non-admin
       if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
-        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)');
+        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด OP)');
         return;
       }
     }
@@ -240,12 +250,17 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   )
                 );
               }
-              if (data.op || isOpCommand) {
+              if (data.op === true || isOpOn) {
+                if (typeof window !== 'undefined') localStorage.setItem('zyntra_op_mode', '1');
                 setUsage((prev) => ({ ...prev, limit: 1000 }));
+              } else if (data.op === false || isOpOff) {
+                if (typeof window !== 'undefined') localStorage.removeItem('zyntra_op_mode');
+                setUsage((prev) => ({ ...prev, limit: 100 }));
+              } else if (typeof data.limit === 'number') {
+                setUsage((prev) => ({ ...prev, limit: data.limit }));
               }
               if (typeof data.used === 'number') {
-                const isOp = typeof window !== 'undefined' && localStorage.getItem('zyntra_op_mode') === '1';
-                setUsage({ used: data.used, limit: isOp ? 1000 : data.limit || 100 });
+                setUsage((prev) => ({ ...prev, used: data.used }));
               }
             }
             if (data.error) throw new Error(data.error);
@@ -638,7 +653,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 rows={2}
                 placeholder={
                   isQuotaExceeded
-                    ? 'โควต้าหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)...'
+                    ? 'โควต้าหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด)...'
                     : 'Message Zyntra v5…'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
@@ -646,7 +661,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <div className="flex items-center justify-between pb-2">
                 <span className="text-[11px] text-[#70727b]">
                   {isQuotaExceeded ? (
-                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today) · พิมพ์ /op เพื่อปลดล็อค</span>
+                    <span className="text-rose-400">Limit reached ({usage.used}/{usage.limit} tokens today) · พิมพ์ /op on เพื่อเปิดโหมด OP</span>
                   ) : (
                     <span>AI can make mistakes. Check important information.</span>
                   )}

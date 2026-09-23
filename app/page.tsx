@@ -27,7 +27,7 @@ export default async function Home() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, settings, todayQuestions, hasOpToday] = await Promise.all([
+  const [chats, settings, todayQuestions, latestOpCommand] = await Promise.all([
     db.chat.findMany({
       where: { userId: user.id },
       orderBy: [{ pinned: 'desc' }, { updatedAt: 'desc' }],
@@ -39,21 +39,24 @@ export default async function Home() {
       where: {
         session: { userId: user.id },
         role: 'USER',
-        content: { not: '/op' },
+        content: { notIn: ['/op', '/op on', '/op off'] },
         createdAt: { gte: startOfDay },
       },
     }),
-    db.message.count({
+    db.message.findFirst({
       where: {
         session: { userId: user.id },
         role: 'USER',
-        content: '/op',
+        content: { in: ['/op', '/op on', '/op off'] },
         createdAt: { gte: startOfDay },
       },
+      orderBy: { createdAt: 'desc' },
     }),
   ]);
 
-  const isOp = hasOpToday > 0 || user.role === 'ADMIN';
+  const isOp = latestOpCommand
+    ? latestOpCommand.content === '/op on' || latestOpCommand.content === '/op'
+    : user.role === 'ADMIN';
   const todayTokens = todayQuestions * 8;
 
   return (

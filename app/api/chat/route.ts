@@ -21,38 +21,41 @@ export async function POST(req: NextRequest) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const [todayQuestions, hasOpToday] = await Promise.all([
+    const [todayQuestions, latestOpCommand] = await Promise.all([
       db.message.count({
         where: {
           session: { userId: user.id },
           role: 'USER',
-          content: { not: '/op' },
+          content: { notIn: ['/op', '/op on', '/op off'] },
           createdAt: { gte: startOfDay },
         },
       }),
-      db.message.count({
+      db.message.findFirst({
         where: {
           session: { userId: user.id },
           role: 'USER',
-          content: '/op',
+          content: { in: ['/op', '/op on', '/op off'] },
           createdAt: { gte: startOfDay },
         },
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
 
-    const isOpActive = hasOpToday > 0 || user.role === 'ADMIN';
-    const effectiveLimit = isOpActive ? 1000 : 100;
+    const isOpActive = latestOpCommand
+      ? latestOpCommand.content === '/op on' || latestOpCommand.content === '/op'
+      : user.role === 'ADMIN';
 
     // 1 question = 8 tokens
     const todayTokens = todayQuestions * 8;
+    const lowerMessage = trimmedMessage.toLowerCase();
 
-    // Secret command: /op unlocks 1,000 tokens quota & 300 characters
-    if (trimmedMessage.toLowerCase() === '/op') {
+    // Secret command: /op on (or /op) unlocks 1,000 tokens quota & 300 characters
+    if (lowerMessage === '/op on' || lowerMessage === '/op') {
       let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
       if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '⚡ OP Mode' } });
 
-      const opText = '⚡ **OP Mode Activated!** ปลดล็อคโควตารายวันเพิ่มเป็น **1,000 โทเคน** และขยายความยาวคำตอบสูงสุดเป็น **300 ตัวอักษร** เรียบร้อยแล้ว';
-      await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op', tokens: 0 } });
+      const opText = '⚡ **OP Mode Activated!** เปิดโหมด OP เรียบร้อยแล้ว (โควตารายวัน **1,000 โทเคน** และขยายคำตอบสูงสุดเป็น **300 ตัวอักษร**)\n\n*หมายเหตุ: หากต้องการปิดโหมด ให้พิมพ์ `/op off`*';
+      await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op on', tokens: 0 } });
       await db.message.create({
         data: { sessionId: chat.id, role: 'ASSISTANT', content: opText, model: 'Zyntra v5 (OP)', tokens: 0 },
       });
@@ -88,9 +91,53 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Secret command: /op off disables OP mode (back to 100 tokens & 200 characters)
+    if (lowerMessage === '/op off') {
+      let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
+      if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: '🔒 Standard Mode' } });
+
+      const offText = '🔒 **OP Mode Deactivated!** ปิดโหมด OP เรียบร้อยแล้ว (กลับสู่โหมดปกติ โควตารายวัน **100 โทเคน** และจำกัดคำตอบสูงสุด **200 ตัวอักษร**)\n\n*หมายเหตุ: หากต้องการเปิดใหม่อีกครั้ง ให้พิมพ์ `/op on`*';
+      await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: '/op off', tokens: 0 } });
+      await db.message.create({
+        data: { sessionId: chat.id, role: 'ASSISTANT', content: offText, model: 'Zyntra v5', tokens: 0 },
+      });
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const enc = new TextEncoder();
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: offText })}\n\n`));
+          controller.enqueue(
+            enc.encode(
+              `data: ${JSON.stringify({
+                done: true,
+                chatId: chat!.id,
+                responseTime: '0.01s',
+                tokens: 0,
+                used: todayTokens,
+                limit: 100,
+                op: false,
+              })}\n\n`
+            )
+          );
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    }
+
+    const effectiveLimit = isOpActive ? 1000 : 100;
+
     // Quota limit enforcement for normal messages
     if (user.role !== 'ADMIN' && todayTokens + 8 > effectiveLimit) {
-      return jsonError('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op เพื่อปลดล็อค)', 429);
+      return jsonError('โควต้าของคุณหมดแล้วสำหรับวันนี้ (พิมพ์ /op on เพื่อเปิดโหมด OP)', 429);
     }
 
     let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
