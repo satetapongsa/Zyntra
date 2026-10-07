@@ -571,11 +571,6 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
             <span className="text-sm font-medium text-[#f0f1f4]">
               {active ? chats.find((c) => c.id === active)?.title || 'Conversation' : 'New conversation'}
             </span>
-            <button className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[#9b9da6] hover:bg-[#1d1f24] border border-[#23252c]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#d2f36b]" />
-              {formatModelDisplay(settings?.model)}
-              <ChevronDown size={12} />
-            </button>
           </div>
           <div className="flex items-center gap-2 text-xs text-[#797c85]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#a4cb54]" /> Workspace
@@ -776,18 +771,22 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 ×
               </button>
             </div>
-            <label className="mb-4 block text-sm text-[#d4d5da]">
+            <div className="mb-4 rounded-lg border border-[#2b2d34] bg-[#1a1b20] p-3 text-xs text-[#8e909a]">
+              Settings are locked and managed by the system administrator.
+            </div>
+            <label className="mb-4 block text-sm text-[#8a8c95] opacity-75">
               Model
               <input
                 name="model"
                 defaultValue={formatModelDisplay(settings?.model)}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm text-white outline-none"
+                disabled
+                className="mt-2 w-full cursor-not-allowed rounded-lg border border-[#23252c] bg-[#101115] p-2.5 text-sm text-[#8a8c95] outline-none"
               />
             </label>
-            <label className="mb-4 block text-sm text-[#d4d5da]">
+            <label className="mb-4 block text-sm text-[#8a8c95] opacity-75">
               <div className="flex items-center justify-between">
                 <span>Temperature</span>
-                <span className="text-xs text-[#d2f36b]">{simTemp}</span>
+                <span className="text-xs text-[#71747e]">{simTemp}</span>
               </div>
               <input
                 type="range"
@@ -795,14 +794,14 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 max="2"
                 step="0.1"
                 value={simTemp}
-                onChange={(e) => setSimTemp(parseFloat(e.target.value))}
-                className="mt-2 w-full accent-[#d2f36b]"
+                disabled
+                className="mt-2 w-full cursor-not-allowed opacity-50 grayscale"
               />
             </label>
-            <label className="mb-4 block text-sm text-[#d4d5da]">
+            <label className="mb-4 block text-sm text-[#8a8c95] opacity-75">
               <div className="flex items-center justify-between">
                 <span>Maximum tokens</span>
-                <span className="text-xs text-[#d2f36b]">{simMaxTokens}</span>
+                <span className="text-xs text-[#71747e]">{simMaxTokens}</span>
               </div>
               <input
                 type="range"
@@ -810,21 +809,25 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 max="8192"
                 step="256"
                 value={simMaxTokens}
-                onChange={(e) => setSimMaxTokens(parseInt(e.target.value))}
-                className="mt-2 w-full accent-[#d2f36b]"
+                disabled
+                className="mt-2 w-full cursor-not-allowed opacity-50 grayscale"
               />
             </label>
-            <label className="mb-5 block text-sm text-[#d4d5da]">
+            <label className="mb-5 block text-sm text-[#8a8c95] opacity-75">
               System prompt
               <textarea
                 value={simSystemPrompt}
-                onChange={(e) => setSimSystemPrompt(e.target.value)}
+                disabled
                 rows={3}
-                className="mt-2 w-full rounded-lg border border-[#2b2d34] bg-[#0b0c0f] p-2.5 text-sm text-white outline-none"
+                className="mt-2 w-full cursor-not-allowed rounded-lg border border-[#23252c] bg-[#101115] p-2.5 text-sm text-[#8a8c95] outline-none"
               />
             </label>
-            <button className="w-full rounded-lg bg-[#d2f36b] py-2.5 font-semibold text-[#12140c] transition hover:bg-[#bce055]">
-              Save preferences
+            <button
+              type="button"
+              disabled
+              className="w-full cursor-not-allowed rounded-lg bg-[#272930] py-2.5 font-medium text-[#737682]"
+            >
+              Preferences Locked
             </button>
           </form>
         </div>
