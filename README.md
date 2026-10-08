@@ -1,13 +1,13 @@
-# Zyntra — Autonomous AI Workspace Platform
+# Zyntra — Enterprise Autonomous AI Workspace Platform
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.2.4-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.0.0-blue?style=flat&logo=react)](https://react.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.5.0-2D3748?style=flat&logo=prisma)](https://www.prisma.io/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat&logo=postgresql)](https://www.postgresql.org/)
+[![Neon Database](https://img.shields.io/badge/Neon-Serverless_Postgres-00E599?style=flat&logo=postgresql)](https://neon.tech/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?style=flat&logo=tailwindcss)](https://tailwindcss.com/)
 
-> **Zyntra** is an enterprise-grade, privacy-first, self-hosted AI conversation orchestration platform. It connects client applications with multi-provider LLM backends (DeepSeek, OpenAI, Google Gemini, Anthropic Claude) through a fault-tolerant, streaming abstraction layer with token attribution and role-based access control.
+> **Zyntra** is an enterprise-grade, privacy-first, self-hosted AI conversation orchestration platform engineered to bridge client applications with upstream LLMs (DeepSeek-R1 / DeepSeek-V3, OpenAI, Gemini, Claude). It features deep reasoning visualization, document attachment analysis, corporate prompt libraries, session export, and strict RBAC authorization.
 
 ---
 
@@ -15,7 +15,7 @@
 
 ### 1. Requirements
 - Node.js 20+
-- PostgreSQL (or run via Docker)
+- PostgreSQL (or Serverless [Neon Database](https://neon.tech/))
 - npm / pnpm / yarn
 
 ### 2. Installation & Setup
@@ -31,29 +31,46 @@ npm install
 # Setup environment variables
 cp .env.example .env
 
+# Sync schema to PostgreSQL / Neon
+npx prisma db push
+
 # Generate Prisma Client
 npx prisma generate
 ```
 
 ### 3. Run Development Server
 
-To run the application locally on the customized default port **3333**:
+The application is configured to run on port **3300**:
 
 ```bash
-npx next dev -p 3333
+npx next dev -p 3300
 ```
 
-Open [http://localhost:3333](http://localhost:3333) in your browser.
+Open [http://localhost:3300](http://localhost:3300) in your browser.
 
 ---
 
-## 🛠️ Features & Recent Updates
+## 🚀 Key Features
 
-- **Streamlined Chat Header:** Clean, distraction-free header layout optimized for focused interactions.
-- **Admin-Locked Preferences:** User Preferences (Model, Temperature, Maximum tokens, System Prompt) are locked and managed centrally by system administrators.
-- **Multi-Provider LLM Gateway:** Unified adapter interface supporting OpenAI-compatible endpoints (DeepSeek, OpenAI, Gemini) and Anthropic Claude.
-- **Backpressure-Managed SSE Pipeline:** Pure `ReadableStream` implementation delivering real-time tokens with atomic metrics persistence.
-- **Stateless Edge Auth & RBAC:** Secure HS256 JWT HTTP-only cookies with deterministic user/admin authorization.
+### 🧠 Collapsible Thinking Process (DeepSeek-R1 / Reasoning)
+- **Real-Time Reasoning Parser:** Automatically extracts and isolates `<think>...</think>` tags during token streaming and upon completion.
+- **Accordion Drawer:** Clean, collapsible UI allowing users to inspect or hide chain-of-thought analysis, architecture decisions, and reasoning steps without cluttering the final output.
+
+### 📎 Document & Code Attachment Analysis
+- **Attach Documents (📎):** Supports client-side ingestion of `.txt`, `.md`, `.json`, `.csv`, `.js`, `.ts`, `.tsx`, `.html`, `.css`, `.py`, `.sql` files up to 2MB.
+- **Attachment Chips:** Interactive preview badges displaying file names, formatted sizes, and instant removal options.
+- **Context Injection:** Seamlessly bundles document contents directly into the prompt payload for instant summarization, code reviews, and data extraction.
+
+### 🏛️ Enterprise-Grade Chat Experience
+- **Differentiated Capsule Message Flow:** High-contrast user capsules aligned alongside sleek, styled assistant surfaces labeled `ENTERPRISE AI`.
+- **Telemetries & Action Bar:**
+  - 📋 **Copy:** One-click copy with visual tick feedback.
+  - 🔄 **Retry / Regenerate:** Regenerate responses on demand.
+  - 👍 / 👎 **Feedback Ratings:** Helpful / Needs Improvement evaluation buttons.
+  - ⏱️ **Telemetry Metrics:** Live response latency and token usage metrics.
+- **📚 Enterprise Prompt Library:** Integrated template drawer for common enterprise workflows (Executive Briefings, Code Review, Formal Customer Communications, Meeting Action Items).
+- **📥 Conversation Export:** Export full conversations as cleanly formatted Markdown (`.md`) files with timestamps and author headers.
+- **🔒 Admin-Locked Preferences:** User Preferences (Model, Temperature, Maximum tokens, System Prompt) are locked and managed centrally by system administrators.
 
 ---
 
@@ -62,7 +79,7 @@ Open [http://localhost:3333](http://localhost:3333) in your browser.
 ```mermaid
 graph TB
     subgraph Client_Layer ["Client Tier (Browser / Mobile)"]
-        UI["React 19 Client SPA<br/>(Markdown, Auto-Grow Textarea, State Machine)"]
+        UI["React 19 Client SPA<br/>(Thinking Drawer, File Attachments, Markdown, Presets)"]
     end
 
     subgraph Ingress_Layer ["Ingress & Reverse Proxy"]
@@ -78,11 +95,11 @@ graph TB
 
     subgraph Data_Tier ["Data & Persistence Tier"]
         PrismaORM["Prisma ORM Client (v6)"]
-        PostgresDB[("PostgreSQL 16 Engine<br/>(Chats, Messages, Logs, Settings, Usage)")]
+        PostgresDB[("Neon Serverless PostgreSQL<br/>(Chats, Messages, Logs, Settings, Usage)")]
     end
 
     subgraph External_Cloud ["Upstream AI Providers"]
-        DeepSeek["DeepSeek API"]
+        DeepSeek["DeepSeek API (V3 / R1)"]
         OpenAI["OpenAI API"]
         Gemini["Google Gemini Gateway"]
         Anthropic["Anthropic Claude API"]
@@ -105,19 +122,20 @@ graph TB
 
 Copy `.env.example` to `.env` and configure:
 
-| Variable | Description | Default |
+| Variable | Description | Example / Default |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/converse?schema=public` |
-| `JWT_SECRET` | Cryptographic secret for JWTs ($\ge 32$ chars) | - |
+| `DATABASE_URL` | Neon / PostgreSQL connection string | `postgresql://user:pass@host/neondb?sslmode=require` |
+| `JWT_SECRET` | Cryptographic secret for JWTs ($\ge 32$ chars) | `replace-with-at-least-32-random-characters` |
 | `AI_PROVIDER` | Upstream provider (`deepseek`, `openai`, `gemini`, `claude`) | `deepseek` |
-| `DEEPSEEK_API_KEY` | DeepSeek API key | - |
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `GEMINI_API_KEY` | Google Gemini API key | - |
-| `CLAUDE_API_KEY` | Anthropic Claude API key | - |
+| `DEEPSEEK_API_KEY` | DeepSeek API key | `sk-...` |
+| `OPENAI_API_KEY` | OpenAI API key | `sk-...` |
+| `GEMINI_API_KEY` | Google Gemini API key | `AIza...` |
+| `CLAUDE_API_KEY` | Anthropic Claude API key | `sk-ant-...` |
 | `AI_MODEL` | Provider model override | `deepseek-chat` |
-| `AI_BASE_URL` | Custom base URL for AI gateway / proxy | - |
-| `APP_URL` | Application URL | `http://localhost:3333` |
+| `APP_URL` | Application URL | `http://localhost:3300` |
 | `DEMO_MODE` | Enable preview mock admin | `false` |
+
+> 🔒 **Security Notice:** `.env` and `.env.*` files are strictly excluded via `.gitignore` to prevent secret leakage. Never commit production keys to version control.
 
 ---
 
@@ -126,7 +144,7 @@ Copy `.env.example` to `.env` and configure:
 Run database and app services with Docker Compose:
 
 ```bash
-# Start PostgreSQL database
+# Start PostgreSQL database container (if not using Neon)
 docker compose up -d db
 
 # Run database migrations
@@ -150,4 +168,4 @@ docker compose up --build -d app
 
 ## 📄 License
 
-Distributed under the [MIT License](LICENSE).
+Distributed under the [MIT License](LICENSE). Built for teams requiring autonomous control over generative AI workspaces.
