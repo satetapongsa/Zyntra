@@ -1,12 +1,13 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
   color-scheme: dark;
-  --bg: #0b0c0f;
-  --panel: #111318;
-  --line: #23252b;
-  --muted: #9699a3;
-  --text: #f3f3f5;
+  --bg: #090a0d;
+  --panel: #101216;
+  --line: #22252c;
+  --muted: #9497a1;
+  --text: #f1f2f5;
   --accent: #d2f36b;
 }
 
@@ -18,7 +19,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

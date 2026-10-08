@@ -24,6 +24,18 @@ import {
   MoreHorizontal,
   Clock,
   Zap,
+  RotateCcw,
+  ThumbsUp,
+  ThumbsDown,
+  Download,
+  Share2,
+  Sparkles,
+  BookOpen,
+  FileText,
+  CheckCircle2,
+  ChevronRight,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 
 type User = { id: string; name: string; email: string; role: string };
@@ -38,6 +50,35 @@ type Message = {
 };
 type Usage = { used: number; limit: number };
 type Props = { user: User; initialChats: Chat[]; settings: any; initialUsage?: Usage };
+
+type PromptPreset = {
+  title: string;
+  category: string;
+  prompt: string;
+};
+
+const enterprisePresets: PromptPreset[] = [
+  {
+    category: 'Business & Strategy',
+    title: 'Executive Summary Brief',
+    prompt: 'ช่วยเขียน Executive Summary สรุปประเด็นสำคัญของโปรเจกต์ ปัญหา แนวทางแก้ไข และผลลัพธ์ทางธุรกิจที่คาดหวัง ในรูปแบบกระชับ ชัดเจนสำหรับผู้บริหารระดับสูง',
+  },
+  {
+    category: 'Engineering & Code',
+    title: 'Code Review & Architecture',
+    prompt: 'ช่วยวิเคราะห์และรีวิว Architecture ของโค้ดต่อไปนี้ พร้อมแนะนำข้อปรับปรุงเรื่อง Security, Performance, Error Handling และ Best Practices:',
+  },
+  {
+    category: 'Operations & Comms',
+    title: 'Formal Customer Response',
+    prompt: 'ช่วยร่างอีเมลตอบกลับลูกค้าองค์กรอย่างเป็นทางการ โดยคงท่าทีสุภาพ เป็นมืออาชีพ ชี้แจงแนวทางแก้ไขปัญหาและ Timeline อย่างชัดเจน:',
+  },
+  {
+    category: 'Data & Analytics',
+    title: 'Meeting Action Items',
+    prompt: 'ช่วยสกัดประเด็นสำคัญ (Key Takeaways), มติที่ประชุม (Decisions Made), และรายการงานที่ต้องทำต่อ (Action Items พร้อมระบุผู้รับผิดชอบและกำหนดเสร็จ) จากบันทึกต่อไปนี้:',
+  },
+];
 
 const starters = [
   'Help me write a project brief',
@@ -121,13 +162,15 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [toast, setToast] = useState('');
   const [usage, setUsage] = useState<Usage>(initialUsage || { used: 0, limit: 100 });
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
   // Local simulated settings for UI
   const [simTemp, setSimTemp] = useState<number>(settings?.temperature ?? 0.7);
   const [simMaxTokens, setSimMaxTokens] = useState<number>(settings?.maxTokens ?? 2048);
   const [simSystemPrompt, setSimSystemPrompt] = useState<string>(
     settings?.systemPrompt || 'You are a helpful, thoughtful AI assistant.'
   );
+
+  const [feedback, setFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
+  const [showPresets, setShowPresets] = useState(false);
 
   const bottom = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
@@ -367,6 +410,48 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  function toggleFeedback(msgId: string, type: 'like' | 'dislike') {
+    setFeedback((prev) => {
+      const current = prev[msgId];
+      if (current === type) {
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      }
+      return { ...prev, [msgId]: type };
+    });
+    setToast(type === 'like' ? 'Feedback recorded: Helpful 👍' : 'Feedback recorded: Needs improvement 👎');
+  }
+
+  function regenerateLast() {
+    if (loading) return;
+    // Find last user message
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'USER');
+    if (lastUserMsg) {
+      send(lastUserMsg.content);
+    }
+  }
+
+  function exportChatMarkdown() {
+    if (messages.length === 0) {
+      setToast('No messages to export');
+      return;
+    }
+    const title = (active ? chats.find((c) => c.id === active)?.title : 'Conversation') || 'Conversation';
+    let md = `# ${title}\n*Exported from Zyntra AI Workspace on ${new Date().toLocaleString()}*\n\n---\n\n`;
+    messages.forEach((m) => {
+      md += `### ${m.role === 'USER' ? user.name : 'Zyntra v5'}\n\n${m.content}\n\n---\n\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setToast('Conversation exported as Markdown');
+  }
+
   // Quota calculation & dynamic progressive colors
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
   const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 8 > usage.limit;
@@ -572,8 +657,28 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               {active ? chats.find((c) => c.id === active)?.title || 'Conversation' : 'New conversation'}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-[#797c85]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#a4cb54]" /> Workspace
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPresets(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-[#262831] bg-[#14151b] px-2.5 py-1.5 text-xs text-[#c4c6cf] hover:border-[#383a46] hover:bg-[#1a1c24] hover:text-white transition"
+              title="Enterprise Prompt Library"
+            >
+              <Sparkles size={13} className="text-[#d2f36b]" />
+              <span className="hidden sm:inline">Prompt Library</span>
+            </button>
+            {messages.length > 0 && (
+              <button
+                onClick={exportChatMarkdown}
+                className="flex items-center gap-1.5 rounded-lg border border-[#262831] bg-[#14151b] px-2.5 py-1.5 text-xs text-[#c4c6cf] hover:border-[#383a46] hover:bg-[#1a1c24] hover:text-white transition"
+                title="Export conversation as Markdown"
+              >
+                <Download size={13} />
+                <span className="hidden sm:inline">Export</span>
+              </button>
+            )}
+            <div className="ml-1 flex items-center gap-2 text-xs text-[#797c85]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#a4cb54]" /> Workspace
+            </div>
           </div>
         </header>
 
@@ -605,31 +710,42 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
             ) : (
               <div className="space-y-6">
                 {messages.map((m) => (
-                  <article key={m.id} className="fade-in flex gap-4">
+                  <article
+                    key={m.id}
+                    className={`fade-in flex gap-3.5 ${
+                      m.role === 'USER' ? 'flex-row-reverse' : 'flex-row'
+                    }`}
+                  >
                     {/* Avatar */}
                     <div
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold shadow-sm ${
                         m.role === 'USER'
-                          ? 'bg-[#292b33] text-white border border-[#383a44]'
-                          : 'bg-[#1b1e14] text-[#d2f36b] border border-[#34372a]'
+                          ? 'bg-gradient-to-tr from-[#252830] to-[#343844] text-[#e8eaef] border border-[#3e4250]'
+                          : 'bg-[#151811] text-[#d2f36b] border border-[#2e3322]'
                       }`}
                     >
-                      {m.role === 'USER' ? user.name[0]?.toUpperCase() : '✳'}
+                      {m.role === 'USER' ? user.name[0]?.toUpperCase() : <Sparkles size={14} className="text-[#d2f36b]" />}
                     </div>
 
-                    {/* Content */}
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-[#8b8e99]">
+                    {/* Message Bubble Body */}
+                    <div
+                      className={`min-w-0 max-w-[85%] sm:max-w-[80%] ${
+                        m.role === 'USER'
+                          ? 'rounded-2xl rounded-tr-sm bg-[#1c1e25] border border-[#2a2c36] px-4 py-3 shadow-md'
+                          : 'flex-1'
+                      }`}
+                    >
+                      <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-[#838692]">
                         <span>{m.role === 'USER' ? user.name : 'Zyntra v5'}</span>
                         {m.role === 'ASSISTANT' && (
-                          <span className="rounded bg-[#1e2027] px-1.5 py-0.2 text-[10px] text-[#a0a4b0]">
-                            AI
+                          <span className="rounded bg-[#1a1c22] px-1.5 py-0.5 text-[9px] font-semibold text-[#9da1ad] border border-[#272932]">
+                            ENTERPRISE AI
                           </span>
                         )}
                       </div>
 
                       {m.content ? (
-                        <div className="prose text-[14px] text-[#e2e3e7]">
+                        <div className={`prose text-[14px] leading-relaxed ${m.role === 'USER' ? 'text-[#f0f1f4]' : 'text-[#e1e2e7]'}`}>
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
@@ -640,40 +756,87 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                           </ReactMarkdown>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 py-2">
-                          <span className="text-xs text-[#9699a3]">Thinking</span>
-                          <span className="flex gap-1">
+                        <div className="flex items-center gap-2.5 py-2.5">
+                          <span className="text-xs text-[#9699a3]">Synthesizing response</span>
+                          <span className="flex gap-1.5">
                             <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b]" />
-                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:100ms]" />
-                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:200ms]" />
+                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:150ms]" />
+                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:300ms]" />
                           </span>
                         </div>
                       )}
 
-                      {/* Assistant Telemetry Badges */}
+                      {/* Assistant Telemetry & Enterprise Action Bar */}
                       {m.role === 'ASSISTANT' && m.content && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#1d1f27] pt-2.5">
                           {m.responseTime && (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-[#262833] bg-[#14151a] px-2 py-0.5 text-[11px] text-[#9ca3af]">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
                               <Clock size={11} className="text-[#d2f36b]" />
                               {m.responseTime}
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1 rounded-md border border-[#262833] bg-[#14151a] px-2 py-0.5 text-[11px] text-[#9ca3af]">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
                             <Zap size={11} className="text-[#d2f36b]" />
                             {m.tokens ?? 8} tokens
                           </span>
-                          <button
-                            onClick={() => copyText(m.id, m.content)}
-                            title="Copy response"
-                            className="inline-flex items-center gap-1 rounded-md border border-transparent p-1 text-[11px] text-[#777983] hover:border-[#262833] hover:bg-[#1a1b22] hover:text-[#d3d4d8]"
-                          >
-                            {copiedId === m.id ? (
-                              <Check size={12} className="text-[#d2f36b]" />
-                            ) : (
-                              <Copy size={12} />
-                            )}
-                          </button>
+
+                          <div className="flex items-center gap-1 ml-auto">
+                            {/* Copy button */}
+                            <button
+                              onClick={() => copyText(m.id, m.content)}
+                              title="Copy response"
+                              className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-[#838692] hover:border-[#272933] hover:bg-[#181a21] hover:text-[#d3d4d8] transition"
+                            >
+                              {copiedId === m.id ? (
+                                <>
+                                  <Check size={12} className="text-[#d2f36b]" />
+                                  <span className="text-[#d2f36b]">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Regenerate button */}
+                            <button
+                              onClick={regenerateLast}
+                              disabled={loading}
+                              title="Regenerate response"
+                              className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-[#838692] hover:border-[#272933] hover:bg-[#181a21] hover:text-[#d3d4d8] disabled:opacity-40 transition"
+                            >
+                              <RotateCcw size={12} />
+                              <span className="hidden sm:inline">Retry</span>
+                            </button>
+
+                            {/* Thumbs up */}
+                            <button
+                              onClick={() => toggleFeedback(m.id, 'like')}
+                              title="Helpful response"
+                              className={`rounded-md p-1.5 text-xs transition ${
+                                feedback[m.id] === 'like'
+                                  ? 'bg-[#1b2210] text-[#d2f36b] border border-[#343e1d]'
+                                  : 'text-[#777983] hover:bg-[#181a21] hover:text-white'
+                              }`}
+                            >
+                              <ThumbsUp size={12} fill={feedback[m.id] === 'like' ? 'currentColor' : 'none'} />
+                            </button>
+
+                            {/* Thumbs down */}
+                            <button
+                              onClick={() => toggleFeedback(m.id, 'dislike')}
+                              title="Needs improvement"
+                              className={`rounded-md p-1.5 text-xs transition ${
+                                feedback[m.id] === 'dislike'
+                                  ? 'bg-[#2b1619] text-rose-400 border border-[#482025]'
+                                  : 'text-[#777983] hover:bg-[#181a21] hover:text-white'
+                              }`}
+                            >
+                              <ThumbsDown size={12} fill={feedback[m.id] === 'dislike' ? 'currentColor' : 'none'} />
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -830,6 +993,64 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               Preferences Locked
             </button>
           </form>
+        </div>
+      )}
+
+      {/* Enterprise Prompt Library Modal */}
+      {showPresets && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowPresets(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl rounded-2xl border border-[#2b2d34] bg-[#141519] p-6 shadow-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between border-b border-[#23252c] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1c2211] text-[#d2f36b] border border-[#2c3417]">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-white">Enterprise Prompt Library</h2>
+                  <p className="text-xs text-[#818491]">คลังเทมเพลตมาตรฐานสำหรับงานธุรกิจและการพัฒนา</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPresets(false)}
+                className="text-[#9699a3] hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {enterprisePresets.map((preset) => (
+                <div
+                  key={preset.title}
+                  className="rounded-xl border border-[#24262f] bg-[#0d0e12] p-4 transition hover:border-[#3d4230] hover:bg-[#111317]"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#d2f36b]">
+                      {preset.category}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setInput(preset.prompt);
+                        setShowPresets(false);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md bg-[#1f2216] px-2.5 py-1 text-xs font-medium text-[#d2f36b] hover:bg-[#283015] border border-[#343e1d] transition"
+                    >
+                      Use Template ↗
+                    </button>
+                  </div>
+                  <h3 className="text-sm font-medium text-white mb-1.5">{preset.title}</h3>
+                  <p className="text-xs text-[#9598a4] leading-relaxed line-clamp-2">{preset.prompt}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
