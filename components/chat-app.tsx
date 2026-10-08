@@ -459,15 +459,21 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  // Handle local file reading for attachments (.txt, .md, .json, .csv, .js, .ts, etc.)
+  // Handle local file reading for attachments with strict token guards
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    for (let i = 0; i < files.length; i++) {
+    if (attachments.length >= 2) {
+      setToast('แนบไฟล์ได้สูงสุด 2 ไฟล์ต่อครั้ง เพื่อประหยัดโทเคน');
+      return;
+    }
+
+    const maxAllowed = Math.min(files.length, 2 - attachments.length);
+    for (let i = 0; i < maxAllowed; i++) {
       const file = files[i];
-      if (file.size > 2 * 1024 * 1024) {
-        setToast(`File "${file.name}" exceeds 2MB limit`);
+      if (file.size > 500 * 1024) {
+        setToast(`ไฟล์ "${file.name}" มีขนาดเกิน 500KB`);
         continue;
       }
 
@@ -475,11 +481,13 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       reader.onload = (event) => {
         const textContent = (event.target?.result as string) || '';
         const sizeFormatted = file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`;
+        // Strictly truncate text content to 2,500 chars to avoid token explosion
+        const safeContent = textContent.slice(0, 2500);
         setAttachments((prev) => [
           ...prev,
-          { name: file.name, size: sizeFormatted, content: textContent.slice(0, 50000) },
+          { name: file.name, size: sizeFormatted, content: safeContent },
         ]);
-        setToast(`Attached "${file.name}"`);
+        setToast(`แนบ "${file.name}" เรียบร้อย (จำกัดขนาดประหยัดโทเคน)`);
       };
       reader.readAsText(file);
     }
@@ -1044,6 +1052,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
               <textarea
                 value={input}
+                maxLength={2000}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -1058,7 +1067,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     ? 'Daily token limit reached. Resets at 00:00.'
                     : attachments.length > 0
                     ? 'Ask questions or summarize attached document(s)…'
-                    : 'Message Zyntra v5… (Attach text/code/doc files with 📎)'
+                    : 'Message Zyntra v5… (Max 2,000 chars per message to save tokens)'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
               />
@@ -1067,18 +1076,22 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={loading}
-                    title="Attach documents (.txt, .md, .csv, .json, code files)"
+                    disabled={loading || attachments.length >= 2}
+                    title="Attach documents (.txt, .md, .csv, .json, max 2 files)"
                     className="flex items-center gap-1.5 rounded-lg border border-[#272931] bg-[#131418] px-2.5 py-1 text-xs text-[#b0b3bf] hover:border-[#383a45] hover:bg-[#1a1c22] hover:text-white transition disabled:opacity-40"
                   >
                     <Paperclip size={13} className="text-[#d2f36b]" />
-                    <span className="text-[11px]">Attach File</span>
+                    <span className="text-[11px]">Attach File ({attachments.length}/2)</span>
                   </button>
                   <span className="text-[11px] text-[#70727b] hidden sm:inline">
-                    {isQuotaExceeded ? (
+                    {input.length > 0 ? (
+                      <span className={input.length >= 1800 ? 'text-amber-400 font-medium' : 'text-[#70727b]'}>
+                        {input.length}/2,000 ตัวอักษร
+                      </span>
+                    ) : isQuotaExceeded ? (
                       <span className="text-rose-400">Daily limit reached ({usage.used}/{usage.limit} tokens today)</span>
                     ) : (
-                      <span>AI can make mistakes. Verify important facts.</span>
+                      <span>Token Saver Active · Max 2k chars</span>
                     )}
                   </span>
                 </div>
