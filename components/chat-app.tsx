@@ -36,6 +36,10 @@ import {
   ChevronRight,
   X,
   AlertCircle,
+  Paperclip,
+  Brain,
+  ChevronUp,
+  FileCode,
 } from 'lucide-react';
 
 type User = { id: string; name: string; email: string; role: string };
@@ -91,6 +95,38 @@ const formatModelDisplay = (m?: string) => {
   if (!m || m.toLowerCase().includes('deepseek') || m.toLowerCase() === 'converse') return 'Zyntra v5';
   return m;
 };
+
+// Helper to extract <think>...</think> tag for reasoning models (DeepSeek-R1 / o1)
+function parseThinkingContent(raw: string) {
+  if (!raw) return { thinking: '', response: '' };
+  
+  // Case 1: Complete <think>...</think> block
+  const completeMatch = /<think>([\s\S]*?)<\/think>([\s\S]*)/i.exec(raw);
+  if (completeMatch) {
+    return {
+      thinking: completeMatch[1].trim(),
+      response: completeMatch[2].trim(),
+      isThinkingFinished: true,
+    };
+  }
+
+  // Case 2: In-progress <think> tag currently streaming
+  const inProgressMatch = /<think>([\s\S]*)/i.exec(raw);
+  if (inProgressMatch) {
+    return {
+      thinking: inProgressMatch[1].trim(),
+      response: '',
+      isThinkingFinished: false,
+    };
+  }
+
+  // Case 3: Standard response without thinking block
+  return {
+    thinking: '',
+    response: raw,
+    isThinkingFinished: true,
+  };
+}
 
 function CodeBlock({ node, inline, className, children, ...props }: any) {
   const match = /language-(\w+)/.exec(className || '');
@@ -171,7 +207,10 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   const [feedback, setFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
   const [showPresets, setShowPresets] = useState(false);
+  const [attachments, setAttachments] = useState<{ name: string; size: string; content: string }[]>([]);
+  const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -271,6 +310,16 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       }
     }
 
+    // Build final content combining attached documents if present
+    let finalContent = trimmed;
+    if (attachments.length > 0) {
+      const docsSummary = attachments
+        .map((a) => `[File Attachment: ${a.name}]\n\`\`\`\n${a.content}\n\`\`\``)
+        .join('\n\n');
+      finalContent = `${trimmed}\n\n${docsSummary}`;
+      setAttachments([]);
+    }
+
     setInput('');
     const userMsgId = crypto.randomUUID();
     const assistantMsgId = crypto.randomUUID();
@@ -278,7 +327,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     const userMsg: Message = {
       id: userMsgId,
       role: 'USER',
-      content: trimmed,
+      content: finalContent,
       createdAt: new Date().toISOString(),
       tokens: isOpCommand ? 0 : 8,
     };
@@ -300,7 +349,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: active || undefined, message: trimmed }),
+        body: JSON.stringify({ chatId: active || undefined, message: finalContent }),
         signal: abort.current.signal,
       });
 
@@ -408,6 +457,42 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setCopiedId(id);
     setToast('Copied to clipboard');
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  // Handle local file reading for attachments (.txt, .md, .json, .csv, .js, .ts, etc.)
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > 2 * 1024 * 1024) {
+        setToast(`File "${file.name}" exceeds 2MB limit`);
+        continue;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const textContent = (event.target?.result as string) || '';
+        const sizeFormatted = file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`;
+        setAttachments((prev) => [
+          ...prev,
+          { name: file.name, size: sizeFormatted, content: textContent.slice(0, 50000) },
+        ]);
+        setToast(`Attached "${file.name}"`);
+      };
+      reader.readAsText(file);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function toggleThinking(msgId: string) {
+    setOpenThinking((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
   }
 
   function toggleFeedback(msgId: string, type: 'like' | 'dislike') {
@@ -744,27 +829,89 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                         )}
                       </div>
 
-                      {m.content ? (
-                        <div className={`prose text-[14px] leading-relaxed ${m.role === 'USER' ? 'text-[#f0f1f4]' : 'text-[#e1e2e7]'}`}>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code: CodeBlock,
-                            }}
-                          >
-                            {m.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2.5 py-2.5">
-                          <span className="text-xs text-[#9699a3]">Synthesizing response</span>
-                          <span className="flex gap-1.5">
-                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b]" />
-                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:150ms]" />
-                            <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:300ms]" />
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        if (!m.content) {
+                          return (
+                            <div className="flex items-center gap-2.5 py-2.5">
+                              <span className="text-xs text-[#9699a3]">Synthesizing response</span>
+                              <span className="flex gap-1.5">
+                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b]" />
+                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:150ms]" />
+                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:300ms]" />
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        if (m.role === 'ASSISTANT') {
+                          const { thinking, response, isThinkingFinished } = parseThinkingContent(m.content);
+                          const isExpanded = openThinking[m.id] ?? !isThinkingFinished;
+
+                          return (
+                            <div className="space-y-3">
+                              {/* Thinking Process Accordion Drawer */}
+                              {thinking && (
+                                <div className="overflow-hidden rounded-xl border border-[#2b2f21] bg-[#10130d] text-xs transition">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleThinking(m.id)}
+                                    className="flex w-full items-center justify-between px-3.5 py-2 font-medium text-[#c4de79] hover:bg-[#161a12] transition"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <Brain size={14} className="text-[#d2f36b]" />
+                                      <span>
+                                        Thinking Process {!isThinkingFinished && '(Analyzing...)'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-[#8f9a6e]">
+                                      <span>{isExpanded ? 'Hide' : 'Show steps'}</span>
+                                      {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                    </div>
+                                  </button>
+                                  {isExpanded && (
+                                    <div className="border-t border-[#23271b] px-3.5 py-2.5 font-mono text-[11px] leading-relaxed text-[#a4af8a] whitespace-pre-wrap bg-[#0c0e09]/70">
+                                      {thinking}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Main Response Markdown */}
+                              {response ? (
+                                <div className="prose text-[14px] leading-relaxed text-[#e1e2e7]">
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                      code: CodeBlock,
+                                    }}
+                                  >
+                                    {response}
+                                  </ReactMarkdown>
+                                </div>
+                              ) : !isThinkingFinished ? (
+                                <div className="flex items-center gap-2 py-1 text-xs text-[#9699a3]">
+                                  <Brain size={13} className="text-[#d2f36b] animate-pulse" />
+                                  <span>Reasoning in progress...</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        }
+
+                        // User message
+                        return (
+                          <div className="prose text-[14px] leading-relaxed text-[#f0f1f4]">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code: CodeBlock,
+                              }}
+                            >
+                              {m.content}
+                            </ReactMarkdown>
+                          </div>
+                        );
+                      })()}
 
                       {/* Assistant Telemetry & Enterprise Action Bar */}
                       {m.role === 'ASSISTANT' && m.content && (
@@ -862,6 +1009,39 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   : 'border-[#30323a] focus-within:border-[#505342]'
               }`}
             >
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                multiple
+                accept=".txt,.md,.json,.csv,.js,.ts,.tsx,.jsx,.html,.css,.py,.sql"
+                className="hidden"
+              />
+
+              {/* Attachment Preview Chips */}
+              {attachments.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2 pt-1 border-b border-[#23252d] pb-2">
+                  {attachments.map((att, idx) => (
+                    <div
+                      key={att.name + idx}
+                      className="flex items-center gap-1.5 rounded-lg border border-[#303426] bg-[#1a1f13] px-2.5 py-1 text-xs text-[#d2f36b]"
+                    >
+                      <FileText size={12} />
+                      <span className="font-medium max-w-[160px] truncate">{att.name}</span>
+                      <span className="text-[10px] text-[#9baa6e]">({att.size})</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(idx)}
+                        className="ml-1 text-[#9baa6e] hover:text-white"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -876,18 +1056,32 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 placeholder={
                   isQuotaExceeded
                     ? 'Daily token limit reached. Resets at 00:00.'
-                    : 'Message Zyntra v5…'
+                    : attachments.length > 0
+                    ? 'Ask questions or summarize attached document(s)…'
+                    : 'Message Zyntra v5… (Attach text/code/doc files with 📎)'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
               />
               <div className="flex items-center justify-between pb-2">
-                <span className="text-[11px] text-[#70727b]">
-                  {isQuotaExceeded ? (
-                    <span className="text-rose-400">Daily limit reached ({usage.used}/{usage.limit} tokens today)</span>
-                  ) : (
-                    <span>AI can make mistakes. Check important information.</span>
-                  )}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading}
+                    title="Attach documents (.txt, .md, .csv, .json, code files)"
+                    className="flex items-center gap-1.5 rounded-lg border border-[#272931] bg-[#131418] px-2.5 py-1 text-xs text-[#b0b3bf] hover:border-[#383a45] hover:bg-[#1a1c22] hover:text-white transition disabled:opacity-40"
+                  >
+                    <Paperclip size={13} className="text-[#d2f36b]" />
+                    <span className="text-[11px]">Attach File</span>
+                  </button>
+                  <span className="text-[11px] text-[#70727b] hidden sm:inline">
+                    {isQuotaExceeded ? (
+                      <span className="text-rose-400">Daily limit reached ({usage.used}/{usage.limit} tokens today)</span>
+                    ) : (
+                      <span>AI can make mistakes. Verify important facts.</span>
+                    )}
+                  </span>
+                </div>
                 {loading ? (
                   <button
                     type="button"
@@ -898,7 +1092,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   </button>
                 ) : (
                   <button
-                    disabled={!input.trim() || loading}
+                    disabled={(!input.trim() && attachments.length === 0) || loading}
                     className="flex items-center justify-center rounded-lg bg-[#d2f36b] p-2 text-[#12140c] transition disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Send size={15} />
