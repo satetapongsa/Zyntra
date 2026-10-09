@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, todayQuestions] = await Promise.all([
+  const [chats, todayUsageSum] = await Promise.all([
     db.chat.findMany({
       where: {
         userId: u.id,

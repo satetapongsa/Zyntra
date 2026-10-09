@@ -27,7 +27,7 @@ export default async function Home() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [chats, settings, todayQuestions, latestOpCommand] = await Promise.all([
+  const [chats, settings, todayUsageSum, latestOpCommand] = await Promise.all([
     db.chat.findMany({
       where: { userId: user.id },
       orderBy: [{ pinned: 'desc' }, { updatedAt: 'desc' }],
