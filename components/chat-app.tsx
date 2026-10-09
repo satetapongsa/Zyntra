@@ -618,10 +618,10 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
           {/* New Chat Button */}
           <button
             onClick={newChat}
-            className="mx-3 mb-4 flex items-center justify-center gap-2 rounded-xl border border-[#2d3037] py-2.5 text-sm font-medium transition hover:border-[#494d3b] hover:bg-[#181a1f]"
+            className="mx-3 mb-4 flex items-center gap-2 rounded-xl border border-[#2d3037] px-3.5 py-2.5 text-sm font-medium transition hover:border-[#494d3b] hover:bg-[#181a1f]"
           >
             <Plus size={16} className="text-[#d2f36b]" /> New chat
-            <span className="ml-auto pr-2 text-xs text-[#777983]">⌘ K</span>
+            <span className="ml-auto text-xs text-[#777983]">⌘ K</span>
           </button>
 
           {/* Search */}
