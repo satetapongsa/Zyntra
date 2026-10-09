@@ -706,19 +706,19 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
-                <span className={`absolute text-[9px] font-bold ${getNumberColor()} transition-colors duration-300`}>
-                  {Math.max(0, usage.limit - usage.used)}
+                <span className={`absolute text-[8px] font-bold ${getNumberColor()} transition-colors duration-300`}>
+                  {quotaPercent}%
                 </span>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#e2e4e9]">Daily Tokens</span>
+                  <span className="font-medium text-[#e2e4e9]">Daily Usage</span>
                   <span className="text-[11px] font-semibold text-[#a0a4b0]">
-                    {usage.used}/{usage.limit}
+                    {quotaPercent}%
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[#71747e]">
-                  {usage.limit >= 1000 ? 'OP Mode (1,000 max)' : '1 question = 8 tokens'}
+                  {usage.limit >= 1000 ? 'OP Mode · Limit 1,000' : `${Math.max(0, 100 - quotaPercent)}% quota remaining`}
                 </p>
               </div>
             </div>
