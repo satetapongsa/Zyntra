@@ -503,9 +503,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         continue;
       }
 
-      // Handle text / code files
-      if (file.size > 500 * 1024) {
-        setToast(`ไฟล์ "${file.name}" มีขนาดเกิน 500KB`);
+      // Handle text / code files (up to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setToast(`ไฟล์ "${file.name}" มีขนาดเกิน 5MB`);
         continue;
       }
 
@@ -1109,7 +1109,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading || attachments.length >= 2}
-                    title="Attach documents (.txt, .md, .csv, .json, max 2 files)"
+                    title="Attach documents (.pdf, .txt, .md, .csv, .json, max 5MB, max 2 files)"
                     className="flex items-center gap-1.5 rounded-lg border border-[#272931] bg-[#131418] px-2.5 py-1 text-xs text-[#b0b3bf] hover:border-[#383a45] hover:bg-[#1a1c22] hover:text-white transition disabled:opacity-40"
                   >
                     <Paperclip size={13} className="text-[#d2f36b]" />
