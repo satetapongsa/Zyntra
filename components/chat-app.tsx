@@ -1097,9 +1097,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 placeholder={
                   isQuotaExceeded
                     ? 'Daily token limit reached. Resets at 00:00.'
-                    : attachments.length > 0
-                    ? 'Ask questions or summarize attached document(s)…'
-                    : 'Message Zyntra v5… (Max 2,000 chars per message to save tokens)'
+                    : 'Message Zentra V5'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
               />
@@ -1118,13 +1116,11 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   <span className="text-[11px] text-[#70727b] hidden sm:inline">
                     {input.length > 0 ? (
                       <span className={input.length >= 1800 ? 'text-amber-400 font-medium' : 'text-[#70727b]'}>
-                        {input.length}/2,000 ตัวอักษร
+                        {input.length}/2,000
                       </span>
                     ) : isQuotaExceeded ? (
-                      <span className="text-rose-400">Daily limit reached ({quotaPercent}% used today)</span>
-                    ) : (
-                      <span>Token Saver Active · Max 2k chars</span>
-                    )}
+                      <span className="text-rose-400">Daily limit reached ({quotaPercent}% used)</span>
+                    ) : null}
                   </span>
                 </div>
                 {loading ? (
