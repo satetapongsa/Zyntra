@@ -472,6 +472,38 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     const maxAllowed = Math.min(files.length, 2 - attachments.length);
     for (let i = 0; i < maxAllowed; i++) {
       const file = files[i];
+
+      // Handle PDF files via server parser
+      if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+        if (file.size > 5 * 1024 * 1024) {
+          setToast(`ไฟล์ PDF "${file.name}" มีขนาดเกิน 5MB`);
+          continue;
+        }
+
+        setToast(`กำลังอ่านข้อความจาก "${file.name}"…`);
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch('/api/parse-pdf', { method: 'POST', body: fd });
+          const json = await res.json();
+          if (!res.ok || json.error) {
+            setToast(`ไม่สามารถแยกข้อความจาก PDF: ${json.error || 'Unknown error'}`);
+            continue;
+          }
+
+          const sizeFormatted = file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`;
+          setAttachments((prev) => [
+            ...prev,
+            { name: file.name, size: sizeFormatted, content: json.text },
+          ]);
+          setToast(`แนบ PDF "${file.name}" เรียบร้อย (${json.pages || 1} หน้า)`);
+        } catch {
+          setToast(`เกิดข้อผิดพลาดในการประมวลผล PDF "${file.name}"`);
+        }
+        continue;
+      }
+
+      // Handle text / code files
       if (file.size > 500 * 1024) {
         setToast(`ไฟล์ "${file.name}" มีขนาดเกิน 500KB`);
         continue;
@@ -1023,7 +1055,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 ref={fileInputRef}
                 onChange={handleFileUpload}
                 multiple
-                accept=".txt,.md,.json,.csv,.js,.ts,.tsx,.jsx,.html,.css,.py,.sql"
+                accept=".pdf,application/pdf,.txt,.md,.json,.csv,.js,.ts,.tsx,.jsx,.html,.css,.py,.sql"
                 className="hidden"
               />
 
