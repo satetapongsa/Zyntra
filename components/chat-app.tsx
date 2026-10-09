@@ -1121,7 +1121,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                         {input.length}/2,000 ตัวอักษร
                       </span>
                     ) : isQuotaExceeded ? (
-                      <span className="text-rose-400">Daily limit reached ({usage.used}/{usage.limit} tokens today)</span>
+                      <span className="text-rose-400">Daily limit reached ({quotaPercent}% used today)</span>
                     ) : (
                       <span>Token Saver Active · Max 2k chars</span>
                     )}
