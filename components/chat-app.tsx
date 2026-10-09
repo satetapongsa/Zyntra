@@ -303,9 +303,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       setUsage((prev) => ({ ...prev, limit: 100 }));
       setToast('OP Mode: OFF');
     } else {
-      // Daily limit check for non-admin (requires at least 2% quota)
-      if (user.role !== 'ADMIN' && usage.used + 2 > usage.limit) {
-        setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้');
+      // Daily limit check for non-admin (requires at least 1% quota)
+      if (user.role !== 'ADMIN' && usage.used + 1 > usage.limit) {
+        setToast('โควต้าของคุณหมดแล้ว (เหลือ 0%) กรุณารอ 5 ชม. เพื่อรีเซ็ต');
         return;
       }
     }
@@ -337,7 +337,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       role: 'ASSISTANT',
       content: '',
       createdAt: new Date().toISOString(),
-      tokens: isOpCommand ? 0 : 2,
+      tokens: isOpCommand ? 0 : 1,
     };
 
     // Immediate UI update
@@ -393,7 +393,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                       ? {
                           ...m,
                           responseTime: data.responseTime,
-                          tokens: data.tokens ?? (isOpCommand ? 0 : 2),
+                          tokens: data.tokens ?? (isOpCommand ? 0 : 1),
                         }
                       : m
                   )
@@ -579,7 +579,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   // Quota calculation & dynamic progressive colors
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
-  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 2 > usage.limit;
+  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 1 > usage.limit;
 
   // Progressive color: Green -> Yellow -> Orange -> Red
   const getRingColor = () => {
@@ -1105,7 +1105,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                 rows={2}
                 placeholder={
                   isQuotaExceeded
-                    ? 'Daily token limit reached. Resets at 00:00.'
+                    ? 'โควต้าหมดแล้ว (เหลือ 0%) รอ 5 ชม. เพื่อรีเซ็ต'
                     : 'Message Zentra V5'
                 }
                 className="max-h-40 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[#71747e] disabled:cursor-not-allowed"
@@ -1128,7 +1128,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                         {input.length}/2,000
                       </span>
                     ) : isQuotaExceeded ? (
-                      <span className="text-rose-400">Daily limit reached ({quotaPercent}% used)</span>
+                      <span className="text-rose-400">โควต้าหมด (เหลือ 0%) · รอรีเซ็ต 5 ชม.</span>
                     ) : null}
                   </span>
                 </div>

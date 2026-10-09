@@ -136,9 +136,9 @@ export async function POST(req: NextRequest) {
 
     const effectiveLimit = isOpActive ? 1000 : 100;
 
-    // Quota limit enforcement for normal messages (requires at least 2% quota)
-    if (user.role !== 'ADMIN' && todayTokens + 2 > effectiveLimit) {
-      return jsonError('โควต้าการใช้งานของคุณหมดแล้วสำหรับวันนี้', 429);
+    // Quota limit enforcement for normal messages (requires at least 1% quota)
+    if (user.role !== 'ADMIN' && todayTokens + 1 > effectiveLimit) {
+      return jsonError('โควต้าของคุณหมดแล้ว (เหลือ 0%) กรุณารอ 5 ชม. เพื่อรีเซ็ตโควต้า', 429);
     }
 
     let chat = validChatId ? await db.chat.findFirst({ where: { id: validChatId, userId: user.id } }) : null;
@@ -254,14 +254,14 @@ Core Principles:
             const responseTimeMs = Date.now() - started;
             const responseTimeSec = (responseTimeMs / 1000).toFixed(2) + 's';
 
-            // Calculate dynamic tokens (2 to 4 tokens = 2% to 4% of daily quota)
+            // Calculate dynamic tokens (1 to 3 tokens = 1% to 3% of quota)
             // Based on prompt length and AI response length
             const totalChars = trimmedMessage.length + full.length;
-            let dynamicTokens = 2; // base 2%
+            let dynamicTokens = 1; // base 1%
             if (totalChars > 1200) {
-              dynamicTokens = 4; // heavy question/response: 4%
-            } else if (totalChars > 400) {
-              dynamicTokens = 3; // medium question/response: 3%
+              dynamicTokens = 3; // heavy question/response: 3%
+            } else if (totalChars > 300) {
+              dynamicTokens = 2; // medium question/response: 2%
             }
 
             const newUsedTokens = todayTokens + dynamicTokens;
