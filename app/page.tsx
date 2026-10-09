@@ -35,13 +35,13 @@ export default async function Home() {
       select: { id: true, title: true, pinned: true, favorite: true, updatedAt: true },
     }),
     db.setting.findUnique({ where: { userId: user.id } }),
-    db.message.count({
+    db.message.aggregate({
       where: {
         session: { userId: user.id },
-        role: 'USER',
-        content: { notIn: ['/op', '/op on', '/op off'] },
+        role: 'ASSISTANT',
         createdAt: { gte: startOfDay },
       },
+      _sum: { tokens: true },
     }),
     db.message.findFirst({
       where: {
@@ -57,7 +57,7 @@ export default async function Home() {
   const isOp = latestOpCommand
     ? latestOpCommand.content === '/op on' || latestOpCommand.content === '/op'
     : user.role === 'ADMIN';
-  const todayTokens = todayQuestions * 8;
+  const todayTokens = todayUsageSum._sum.tokens || 0;
 
   return (
     <ChatApp

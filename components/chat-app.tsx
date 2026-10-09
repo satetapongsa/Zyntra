@@ -303,8 +303,8 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       setUsage((prev) => ({ ...prev, limit: 100 }));
       setToast('OP Mode: OFF');
     } else {
-      // Daily limit check for non-admin
-      if (user.role !== 'ADMIN' && usage.used + 8 > usage.limit) {
+      // Daily limit check for non-admin (requires at least 2% quota)
+      if (user.role !== 'ADMIN' && usage.used + 2 > usage.limit) {
         setToast('โควต้าของคุณหมดแล้วสำหรับวันนี้');
         return;
       }
@@ -329,7 +329,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       role: 'USER',
       content: finalContent,
       createdAt: new Date().toISOString(),
-      tokens: isOpCommand ? 0 : 8,
+      tokens: 0,
     };
 
     const assistantMsg: Message = {
@@ -337,7 +337,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       role: 'ASSISTANT',
       content: '',
       createdAt: new Date().toISOString(),
-      tokens: isOpCommand ? 0 : 8,
+      tokens: isOpCommand ? 0 : 2,
     };
 
     // Immediate UI update
@@ -393,7 +393,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                       ? {
                           ...m,
                           responseTime: data.responseTime,
-                          tokens: data.tokens ?? (isOpCommand ? 0 : 8),
+                          tokens: data.tokens ?? (isOpCommand ? 0 : 2),
                         }
                       : m
                   )
@@ -579,7 +579,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   // Quota calculation & dynamic progressive colors
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
-  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 8 > usage.limit;
+  const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 2 > usage.limit;
 
   // Progressive color: Green -> Yellow -> Orange -> Red
   const getRingColor = () => {
@@ -971,7 +971,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                           )}
                           <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
                             <Zap size={11} className="text-[#d2f36b]" />
-                            {m.tokens ?? 8} tokens
+                            {typeof m.tokens === 'number'
+                              ? `${Math.max(1, Math.round((m.tokens / usage.limit) * 100))}%`
+                              : '2%'}
                           </span>
 
                           <div className="flex items-center gap-1 ml-auto">

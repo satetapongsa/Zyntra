@@ -21,17 +21,17 @@ export async function GET(req: NextRequest) {
       take: 100,
       select: { id: true, title: true, pinned: true, favorite: true, updatedAt: true },
     }),
-    db.message.count({
+    db.message.aggregate({
       where: {
         session: { userId: u.id },
-        role: 'USER',
+        role: 'ASSISTANT',
         createdAt: { gte: startOfDay },
       },
+      _sum: { tokens: true },
     }),
   ]);
 
-  // 1 question = 8 tokens
-  const todayTokens = todayQuestions * 8;
+  const todayTokens = todayUsageSum._sum.tokens || 0;
 
   return NextResponse.json({ chats, usage: { used: todayTokens, limit: 100 } });
 }

@@ -21,14 +21,14 @@ export async function POST(req: NextRequest) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const [todayQuestions, latestOpCommand] = await Promise.all([
-      db.message.count({
+    const [todayUsageSum, latestOpCommand] = await Promise.all([
+      db.message.aggregate({
         where: {
           session: { userId: user.id },
-          role: 'USER',
-          content: { notIn: ['/op', '/op on', '/op off'] },
+          role: 'ASSISTANT',
           createdAt: { gte: startOfDay },
         },
+        _sum: { tokens: true },
       }),
       db.message.findFirst({
         where: {
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       ? latestOpCommand.content === '/op on' || latestOpCommand.content === '/op'
       : user.role === 'ADMIN';
 
-    // 1 question = 8 tokens
-    const todayTokens = todayQuestions * 8;
+    // Total tokens consumed today (sum of dynamic 2-4% tokens per question)
+    const todayTokens = todayUsageSum._sum.tokens || 0;
     const lowerMessage = trimmedMessage.toLowerCase();
 
     // Secret command: /op on (or /op) unlocks 1,000 tokens quota
@@ -135,8 +135,8 @@ export async function POST(req: NextRequest) {
 
     const effectiveLimit = isOpActive ? 1000 : 100;
 
-    // Quota limit enforcement for normal messages
-    if (user.role !== 'ADMIN' && todayTokens + 8 > effectiveLimit) {
+    // Quota limit enforcement for normal messages (requires at least 2% quota)
+    if (user.role !== 'ADMIN' && todayTokens + 2 > effectiveLimit) {
       return jsonError('โควต้าการใช้งานของคุณหมดแล้วสำหรับวันนี้', 429);
     }
 
@@ -154,8 +154,8 @@ export async function POST(req: NextRequest) {
     ]);
     const prior = rawPrior.reverse();
 
-    // Persist user question (costs 8 tokens)
-    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: trimmedMessage, tokens: 8 } });
+    // Persist user question
+    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: trimmedMessage, tokens: 0 } });
 
     // Dynamic real-time date & time injection (Bangkok & UTC)
     const now = new Date();
@@ -244,11 +244,22 @@ Core Principles:
 
             const responseTimeMs = Date.now() - started;
             const responseTimeSec = (responseTimeMs / 1000).toFixed(2) + 's';
-            const newUsedTokens = todayTokens + 8;
+
+            // Calculate dynamic tokens (2 to 4 tokens = 2% to 4% of daily quota)
+            // Based on prompt length and AI response length
+            const totalChars = trimmedMessage.length + full.length;
+            let dynamicTokens = 2; // base 2%
+            if (totalChars > 1200) {
+              dynamicTokens = 4; // heavy question/response: 4%
+            } else if (totalChars > 400) {
+              dynamicTokens = 3; // medium question/response: 3%
+            }
+
+            const newUsedTokens = todayTokens + dynamicTokens;
 
             await db.$transaction([
               db.message.create({
-                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens: 8 },
+                data: { sessionId: chat!.id, role: 'ASSISTANT', content: full, model, tokens: dynamicTokens },
               }),
               db.aiLog.create({
                 data: {
@@ -257,11 +268,11 @@ Core Principles:
                   response: full,
                   model,
                   responseTime: responseTimeMs,
-                  tokens: 8,
+                  tokens: dynamicTokens,
                 },
               }),
               db.apiUsage.create({
-                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens: 8 },
+                data: { userId: user.id, provider: process.env.AI_PROVIDER || 'deepseek', tokens: dynamicTokens },
               }),
             ]);
 
@@ -272,7 +283,7 @@ Core Principles:
                   chatId: chat!.id,
                   responseTime: responseTimeSec,
                   responseTimeMs,
-                  tokens: 8,
+                  tokens: dynamicTokens,
                   used: newUsedTokens,
                   limit: effectiveLimit,
                   remaining: Math.max(0, effectiveLimit - newUsedTokens),
