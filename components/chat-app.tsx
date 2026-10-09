@@ -712,13 +712,20 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#e2e4e9]">Daily Usage</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-[#e2e4e9]">Daily Usage</span>
+                    {usage.limit >= 1000 && (
+                      <span className="rounded bg-[#d2f36b]/15 px-1 py-0.2 text-[9px] font-semibold text-[#d2f36b]">
+                        OP
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[11px] font-semibold text-[#a0a4b0]">
                     {quotaPercent}%
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[#71747e]">
-                  {usage.limit >= 1000 ? 'OP Mode · Limit 1,000' : `${Math.max(0, 100 - quotaPercent)}% quota remaining`}
+                  {Math.max(0, 100 - quotaPercent)}% quota remaining
                 </p>
               </div>
             </div>
