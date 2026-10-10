@@ -40,6 +40,7 @@ import {
   Brain,
   ChevronUp,
   FileCode,
+  ArrowDown,
 } from 'lucide-react';
 
 type User = { id: string; name: string; email: string; role: string };
@@ -211,9 +212,25 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
   const router = useRouter();
+
+  // Scroll position tracking for "Scroll to bottom" button
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // Show arrow if user has scrolled up more than 120px from bottom
+    setShowScrollBottom(distanceToBottom > 120);
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    bottom.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+  };
 
   // Load OP mode from localStorage if previously unlocked
   useEffect(() => {
@@ -225,10 +242,12 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     }
   }, []);
 
-  // Scroll to bottom smoothly
+  // When active chat switches, scroll to bottom once
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    if (active) {
+      setTimeout(() => scrollToBottom(false), 50);
+    }
+  }, [active]);
 
   // Toast timer
   useEffect(() => {
@@ -344,6 +363,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setLoading(true);
     abort.current = new AbortController();
+
+    // When user sends a message, smoothly scroll down once
+    setTimeout(() => scrollToBottom(true), 50);
 
     try {
       const res = await fetch('/api/chat', {
@@ -816,7 +838,11 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         </header>
 
         {/* Message Feed */}
-        <section className="chat-scroll flex-1 overflow-y-auto">
+        <section
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="chat-scroll relative flex-1 overflow-y-auto"
+        >
           <div className="mx-auto max-w-[760px] px-5 pb-8 pt-8">
             {messages.length === 0 ? (
               <div className="fade-in flex min-h-[55vh] flex-col items-center justify-center text-center">
@@ -1043,6 +1069,18 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
             )}
             <div ref={bottom} />
           </div>
+
+          {/* Floating Scroll to Bottom Arrow Button */}
+          {showScrollBottom && (
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true)}
+              title="Scroll to bottom"
+              className="sticky bottom-4 ml-auto mr-6 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[#2d303a] bg-[#16171d]/95 text-[#d0d3de] shadow-xl backdrop-blur hover:border-[#424653] hover:bg-[#1f2129] hover:text-white transition active:scale-95"
+            >
+              <ArrowDown size={16} />
+            </button>
+          )}
         </section>
 
         {/* Input Footer */}
