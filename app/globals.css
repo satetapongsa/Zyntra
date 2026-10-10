@@ -144,3 +144,94 @@ button {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* =========================================================================
+   VS Code Dark Modern Syntax Highlighting Theme (Prism tokens)
+   ========================================================================= */
+.vscode-code-block pre,
+.vscode-code-block code {
+  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-feature-settings: "liga" 0;
+  tab-size: 2;
+}
+
+/* Line numbers */
+.vscode-line-numbers {
+  user-select: none;
+  text-align: right;
+  color: #636674;
+  padding-right: 16px;
+  border-right: 1px solid #23252d;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Syntax tokens matching VS Code Dark+ */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #d4d4d4;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #b5cea8;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #ce9178;
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: #d4d4d4;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #c586c0;
+}
+
+.token.function,
+.token.class-name {
+  color: #dcdcaa;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #9cdcfe;
+}
+
+.token.parameter {
+  color: #9cdcfe;
+}
+
+.token.keyword.control {
+  color: #c586c0;
+}
+
+.token.type,
+.token.class-name {
+  color: #4ec9b0;
+}
+

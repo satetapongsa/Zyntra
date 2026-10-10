@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { highlightCode } from '@/lib/code-highlighter';
 import {
   Plus,
   Search,
@@ -144,21 +145,34 @@ function CodeBlock({ node, inline, className, children, ...props }: any) {
   const isMultiLine = codeContent.includes('\n');
 
   if (!inline && (match || isMultiLine)) {
+    const highlightedHtml = highlightCode(codeContent, lang);
+    const lines = codeContent.split('\n');
+
     return (
-      <div className="my-3 overflow-hidden rounded-xl border border-[#272932] bg-[#0c0d11] text-sm shadow-lg">
-        <div className="flex items-center justify-between border-b border-[#21232b] bg-[#15161c] px-3.5 py-1.5 text-xs text-[#8f929d]">
-          <span className="font-mono text-[11px] font-medium lowercase tracking-wider text-[#a5a8b5]">
-            {lang || 'code'}
-          </span>
+      <div className="vscode-code-block my-4 overflow-hidden rounded-xl border border-[#262833] bg-[#111217] text-[13px] shadow-2xl">
+        {/* VS Code Window Header */}
+        <div className="flex items-center justify-between border-b border-[#20222a] bg-[#16171e] px-4 py-2 text-xs">
+          <div className="flex items-center gap-2.5">
+            {/* macOS / VS Code window control dots */}
+            <div className="flex items-center gap-1.5 opacity-80">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#e05c53]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#f2be3f]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#52c444]" />
+            </div>
+            <span className="ml-2 font-mono text-[11px] font-semibold text-[#8e92a2]">
+              {lang || 'code'}
+            </span>
+          </div>
+
           <button
             onClick={handleCopy}
             type="button"
-            className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-[#8e929f] transition hover:bg-[#23252e] hover:text-white"
+            className="flex items-center gap-1.5 rounded-md border border-[#2b2d39] bg-[#1c1e27] px-2.5 py-1 text-[11px] font-medium text-[#b5b8c7] transition hover:border-[#3c3f4e] hover:bg-[#232631] hover:text-white"
           >
             {copied ? (
               <>
                 <Check size={12} className="text-[#d2f36b]" />
-                <span className="text-[#d2f36b]">Copied!</span>
+                <span className="text-[#d2f36b]">Copied</span>
               </>
             ) : (
               <>
@@ -168,11 +182,22 @@ function CodeBlock({ node, inline, className, children, ...props }: any) {
             )}
           </button>
         </div>
-        <div className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-[#e6e8ee]">
-          <pre className="!bg-transparent !p-0 !m-0">
-            <code className={className} {...props}>
-              {children}
-            </code>
+
+        {/* Code Content with Line Numbers & Syntax Highlighting */}
+        <div className="flex overflow-x-auto p-3.5 leading-6">
+          {/* Line Numbers */}
+          <div className="vscode-line-numbers select-none text-right pr-3.5 border-r border-[#20222b] text-[12px] text-[#555866]">
+            {lines.map((_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
+
+          {/* Highlighted Code */}
+          <pre className="!bg-transparent !p-0 !m-0 pl-3.5 overflow-visible font-mono text-[13px] text-[#e0e2e8]">
+            <code
+              className={className}
+              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+            />
           </pre>
         </div>
       </div>
