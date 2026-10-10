@@ -215,6 +215,9 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [chats, setChats] = useState<Chat[]>(initialChats);
   const [active, setActive] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const cacheRef = useRef<Record<string, Message[]>>({});
+  const activeRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sidebar, setSidebar] = useState(true);
@@ -283,30 +286,82 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   const visible = chats.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()));
 
-  // Switch chat
+  // Sync activeRef
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
+  // Pre-fetch a chat into memory cache
+  const prefetchChat = (id: string) => {
+    if (!id || cacheRef.current[id]) return;
+    fetch(`/api/chat/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.chat?.messages) {
+          cacheRef.current[id] = d.chat.messages;
+        }
+      })
+      .catch(() => {});
+  };
+
+  // Switch chat with instant transition & background fetch
   async function selectChat(id: string) {
     if (active === id) return;
+    if (loading) abort.current?.abort();
+
+    // 1. Instant switch
     setActive(id);
+
+    // 2. If cached, display instantly
+    if (cacheRef.current[id]) {
+      setMessages(cacheRef.current[id]);
+      setChatLoading(false);
+      setTimeout(() => scrollToBottom(false), 20);
+      return;
+    }
+
+    // 3. If not cached, clear current view and show sleek skeleton/loading instantly
+    setMessages([]);
+    setChatLoading(true);
+
     try {
       const r = await fetch(`/api/chat/${id}`);
       if (r.ok) {
         const d = await r.json();
-        setMessages(d.chat?.messages || []);
+        const msgs = d.chat?.messages || [];
+        cacheRef.current[id] = msgs;
+        // Only update if still on this active chat
+        if (activeRef.current === id) {
+          setMessages(msgs);
+          setTimeout(() => scrollToBottom(false), 20);
+        }
+      } else {
+        throw new Error('Failed to load chat');
       }
     } catch {
-      setToast('Failed to load chat');
+      if (activeRef.current === id) {
+        setToast('Failed to load chat');
+      }
+    } finally {
+      if (activeRef.current === id) {
+        setChatLoading(false);
+      }
     }
   }
 
-  // Create new chat
+  // Create new chat - 100% instant
   function newChat() {
     if (loading) abort.current?.abort();
     setActive(null);
     setMessages([]);
+    setChatLoading(false);
+    setInput('');
+    setAttachments([]);
   }
 
   // Delete chat
   async function remove(id: string) {
+    delete cacheRef.current[id];
     await fetch(`/api/chat/${id}`, { method: 'DELETE' });
     setChats((prev) => prev.filter((c) => c.id !== id));
     if (active === id) newChat();
@@ -472,6 +527,13 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       if (chatRes.usage) {
         const isOp = typeof window !== 'undefined' && localStorage.getItem('zyntra_op_mode') === '1';
         setUsage({ used: chatRes.usage.used, limit: isOp ? 1000 : chatRes.usage.limit });
+      }
+      // Update cache for active chat
+      if (activeRef.current) {
+        setMessages((currentMsgs) => {
+          cacheRef.current[activeRef.current!] = currentMsgs;
+          return currentMsgs;
+        });
       }
     } catch (e: any) {
       if (e.name === 'AbortError') {
@@ -697,6 +759,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               >
                 <button
                   onClick={() => selectChat(c.id)}
+                  onMouseEnter={() => prefetchChat(c.id)}
                   className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-[13px] text-[#d3d4d8]"
                 >
                   <span className="mr-2 inline-block align-middle text-[#858791]">
@@ -869,7 +932,28 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
           className="chat-scroll relative flex-1 overflow-y-auto"
         >
           <div className="mx-auto max-w-[760px] px-5 pb-8 pt-8">
-            {messages.length === 0 ? (
+            {chatLoading ? (
+              <div className="fade-in space-y-6 animate-pulse">
+                <div className="flex gap-3.5">
+                  <div className="h-8 w-8 rounded-xl bg-[#1c1e25]" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-32 rounded bg-[#1c1e25]" />
+                    <div className="h-16 w-3/4 rounded-xl bg-[#181a20]" />
+                  </div>
+                </div>
+                <div className="flex flex-row-reverse gap-3.5">
+                  <div className="h-8 w-8 rounded-xl bg-[#252830]" />
+                  <div className="h-12 w-1/2 rounded-xl bg-[#20222a]" />
+                </div>
+                <div className="flex gap-3.5">
+                  <div className="h-8 w-8 rounded-xl bg-[#1c1e25]" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-28 rounded bg-[#1c1e25]" />
+                    <div className="h-24 w-5/6 rounded-xl bg-[#181a20]" />
+                  </div>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="fade-in flex min-h-[55vh] flex-col items-center justify-center text-center">
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#34372a] bg-[#1b1e14] text-3xl text-[#d2f36b] shadow-[0_0_24px_rgba(210,243,107,0.12)]">
                   ✳
