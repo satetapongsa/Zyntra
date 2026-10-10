@@ -90,11 +90,21 @@ button {
 
 .prose pre {
   overflow-x: auto;
-  background: #14161b;
-  border: 1px solid #282b33;
-  border-radius: 8px;
-  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   margin: 0.6rem 0;
+}
+
+.vscode-code-block pre {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .prose code {

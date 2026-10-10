@@ -193,9 +193,9 @@ function CodeBlock({ node, inline, className, children, ...props }: any) {
           </div>
 
           {/* Highlighted Code */}
-          <pre className="!bg-transparent !p-0 !m-0 pl-3.5 overflow-visible font-mono text-[13px] text-[#e0e2e8]">
+          <pre className="!bg-transparent !p-0 !m-0 !border-none !shadow-none !outline-none pl-3.5 overflow-visible font-mono text-[13px] text-[#e0e2e8]">
             <code
-              className={className}
+              className={`${className || ''} !bg-transparent !p-0 !border-none`}
               dangerouslySetInnerHTML={{ __html: highlightedHtml }}
             />
           </pre>
