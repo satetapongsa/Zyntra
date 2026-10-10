@@ -579,20 +579,21 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   // Quota calculation & dynamic progressive colors
   const quotaPercent = Math.min(100, Math.round((usage.used / usage.limit) * 100));
+  const remainingPercent = Math.max(0, 100 - quotaPercent);
   const isQuotaExceeded = user.role !== 'ADMIN' && usage.used + 1 > usage.limit;
 
-  // Progressive color: Green -> Yellow -> Orange -> Red
+  // Progressive color based on Remaining quota: Green (>50%) -> Yellow (25-50%) -> Orange (10-25%) -> Red (<10%)
   const getRingColor = () => {
-    if (isQuotaExceeded || quotaPercent >= 90) return 'text-rose-500';
-    if (quotaPercent >= 75) return 'text-orange-400';
-    if (quotaPercent >= 50) return 'text-yellow-400';
-    return 'text-[#d2f36b]';
+    if (isQuotaExceeded || remainingPercent <= 10) return 'text-rose-500';
+    if (remainingPercent <= 25) return 'text-orange-400';
+    if (remainingPercent <= 50) return 'text-yellow-400';
+    return 'text-[#46a758]';
   };
 
   const getNumberColor = () => {
-    if (isQuotaExceeded || quotaPercent >= 90) return 'text-rose-400';
-    if (quotaPercent >= 75) return 'text-orange-300';
-    if (quotaPercent >= 50) return 'text-yellow-300';
+    if (isQuotaExceeded || remainingPercent <= 10) return 'text-rose-400';
+    if (remainingPercent <= 25) return 'text-orange-300';
+    if (remainingPercent <= 50) return 'text-yellow-300';
     return 'text-white';
   };
 
@@ -684,49 +685,49 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
             ))}
           </div>
 
-          {/* Daily Quota Donut Ring with Progressive Color Shift */}
-          <div className="mx-3 mb-2 rounded-xl border border-[#23252b] bg-[#14151a] p-3">
-            <div className="flex items-center gap-3">
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-                <svg className="h-9 w-9 -rotate-90 transform" viewBox="0 0 36 36">
-                  <path
-                    className="text-[#25272e]"
-                    strokeWidth="3.5"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  <path
-                    className={`${getRingColor()} transition-all duration-500`}
-                    strokeDasharray={`${quotaPercent}, 100`}
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                </svg>
-                <span className={`absolute text-[8px] font-bold ${getNumberColor()} transition-colors duration-300`}>
-                  {quotaPercent}%
-                </span>
-              </div>
+          {/* Five Hour Limit Remaining Card (matching screenshot style) */}
+          <div className="mx-3 mb-2 rounded-xl border border-[#23252b] bg-[#14151a] p-3 transition hover:border-[#2f323a]">
+            <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-[#e2e4e9]">Daily Usage</span>
-                    {usage.limit >= 1000 && (
-                      <span className="rounded bg-[#d2f36b]/15 px-1 py-0.2 text-[9px] font-semibold text-[#d2f36b]">
-                        OP
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] font-semibold text-[#a0a4b0]">
-                    {quotaPercent}%
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-[#e2e4e9] truncate">Five Hour Limit Remaining</span>
+                  {usage.limit >= 1000 && (
+                    <span className="rounded bg-[#d2f36b]/15 px-1 py-0.2 text-[9px] font-semibold text-[#d2f36b]">
+                      OP
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[#71747e]">
-                  {Math.max(0, 100 - quotaPercent)}% quota remaining
+                  {remainingPercent > 0
+                    ? `${remainingPercent}% quota available · resets in 5h`
+                    : 'Limit reached (0%) · resets in 5h'}
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-semibold ${getNumberColor()} transition-colors duration-300`}>
+                  {remainingPercent}%
+                </span>
+                <div className="relative flex h-6 w-6 items-center justify-center">
+                  <svg className="h-6 w-6 -rotate-90 transform" viewBox="0 0 36 36">
+                    <path
+                      className="text-[#25272e]"
+                      strokeWidth="4"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className={`${getRingColor()} transition-all duration-500`}
+                      strokeDasharray={`${remainingPercent}, 100`}
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
@@ -1116,11 +1117,10 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading || attachments.length >= 2}
-                    title="Attach documents (.pdf, .txt, .md, .csv, .json, max 5MB, max 2 files)"
-                    className="flex items-center gap-1.5 rounded-lg border border-[#272931] bg-[#131418] px-2.5 py-1 text-xs text-[#b0b3bf] hover:border-[#383a45] hover:bg-[#1a1c22] hover:text-white transition disabled:opacity-40"
+                    title="Attach file (.pdf, .txt, .md, .csv, max 5MB)"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#9da1b0] hover:bg-[#20222a] hover:text-white transition disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <Paperclip size={13} className="text-[#d2f36b]" />
-                    <span className="text-[11px]">Attach File ({attachments.length}/2)</span>
+                    <Plus size={18} />
                   </button>
                   <span className="text-[11px] text-[#70727b] hidden sm:inline">
                     {input.length > 0 ? (
