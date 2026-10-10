@@ -252,7 +252,6 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     settings?.systemPrompt || 'You are a helpful, thoughtful AI assistant.'
   );
 
-  const [feedback, setFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
   const [showPresets, setShowPresets] = useState(false);
@@ -608,6 +607,72 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  // Export entire chat as beautifully formatted Markdown (.md)
+  function exportChatMarkdown() {
+    if (messages.length === 0) {
+      setToast('ไม่มีข้อความให้ส่งออก');
+      return;
+    }
+
+    const currentChat = active ? chats.find((c) => c.id === active) : null;
+    const title = currentChat?.title || 'บทสนทนา Zyntra';
+    const safeFilename = `${title.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'chat'}.md`;
+
+    const now = new Date();
+    const exportTimeStr = new Intl.DateTimeFormat('th-TH', {
+      dateStyle: 'full',
+      timeStyle: 'medium',
+      timeZone: 'Asia/Bangkok',
+    }).format(now);
+
+    let md = `# ${title}\n\n`;
+    md += `> **วันที่ส่งออก:** ${exportTimeStr} (GMT+7)\n`;
+    md += `> **ผู้ใช้:** ${user.name} (${user.email})\n`;
+    md += `> **ระบบ:** Zyntra AI Enterprise\n\n`;
+    md += `---\n\n`;
+
+    let questionIndex = 1;
+    for (const msg of messages) {
+      if (msg.role === 'USER') {
+        md += `### 👤 คำถามที่ ${questionIndex}: ${user.name}\n\n`;
+        md += `${msg.content.trim()}\n\n`;
+        questionIndex++;
+      } else if (msg.role === 'ASSISTANT') {
+        const { thinking, response } = parseThinkingContent(msg.content);
+        md += `### 🤖 คำตอบจาก Zyntra AI\n\n`;
+
+        if (thinking) {
+          md += `<details>\n<summary><b>กระบวนการคิดและวิเคราะห์ (Thinking Process)</b></summary>\n\n`;
+          md += `\`\`\`text\n${thinking.trim()}\n\`\`\`\n\n`;
+          md += `</details>\n\n`;
+        }
+
+        if (response) {
+          md += `${response.trim()}\n\n`;
+        }
+
+        if (msg.responseTime || msg.tokens) {
+          md += `*⏱️ เวลาตอบสนอง: ${msg.responseTime || '-'} | โควต้าที่ใช้: ${msg.tokens ? `${msg.tokens}%` : '2%'}*\n\n`;
+        }
+
+        md += `---\n\n`;
+      }
+    }
+
+    // Create blob and trigger browser download
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = safeFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setToast(`ส่งออกไฟล์ "${safeFilename}" เรียบร้อยแล้ว`);
+  }
+
   // Handle local file reading for attachments with strict token guards
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -682,48 +747,6 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
   function toggleThinking(msgId: string) {
     setOpenThinking((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
-  }
-
-  function toggleFeedback(msgId: string, type: 'like' | 'dislike') {
-    setFeedback((prev) => {
-      const current = prev[msgId];
-      if (current === type) {
-        const next = { ...prev };
-        delete next[msgId];
-        return next;
-      }
-      return { ...prev, [msgId]: type };
-    });
-    setToast(type === 'like' ? 'Feedback recorded: Helpful 👍' : 'Feedback recorded: Needs improvement 👎');
-  }
-
-  function regenerateLast() {
-    if (loading) return;
-    // Find last user message
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'USER');
-    if (lastUserMsg) {
-      send(lastUserMsg.content);
-    }
-  }
-
-  function exportChatMarkdown() {
-    if (messages.length === 0) {
-      setToast('No messages to export');
-      return;
-    }
-    const title = (active ? chats.find((c) => c.id === active)?.title : 'Conversation') || 'Conversation';
-    let md = `# ${title}\n*Exported from Zyntra AI Workspace on ${new Date().toLocaleString()}*\n\n---\n\n`;
-    messages.forEach((m) => {
-      md += `### ${m.role === 'USER' ? user.name : 'Zyntra v5'}\n\n${m.content}\n\n---\n\n`;
-    });
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setToast('Conversation exported as Markdown');
   }
 
   // Quota calculation & dynamic progressive colors
