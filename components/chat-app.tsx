@@ -625,10 +625,10 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  // Export entire chat as beautifully formatted Markdown (.md)
+  // Export entire chat as clean, token-efficient English Markdown (.md)
   async function exportChatMarkdown(targetChatId?: string) {
     let targetMsgs = messages;
-    let title = 'บทสนทนา Zyntra';
+    let title = 'Chat';
 
     if (targetChatId && targetChatId !== active) {
       const c = chats.find((item) => item.id === targetChatId);
@@ -662,44 +662,15 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
     const safeFilename = `${title.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'chat'}.md`;
 
-    const now = new Date();
-    const exportTimeStr = new Intl.DateTimeFormat('th-TH', {
-      dateStyle: 'full',
-      timeStyle: 'medium',
-      timeZone: 'Asia/Bangkok',
-    }).format(now);
+    let md = `# ${title}\n\n`;
 
-    let md = `# ${title.toUpperCase()}\n\n`;
-    md += `> **วันที่ส่งออก:** ${exportTimeStr} (GMT+7)\n`;
-    md += `> **ผู้ใช้งาน:** ${user.name} (${user.email})\n`;
-    md += `> **โมเดลปัญญาประดิษฐ์:** Zyntra AI Enterprise\n\n`;
-    md += `---\n\n`;
-
-    let questionIndex = 1;
     for (const msg of targetMsgs) {
       if (msg.role === 'USER') {
-        md += `### 👤 คำถามที่ ${questionIndex}: **${user.name}**\n\n`;
-        md += `${msg.content.trim()}\n\n`;
-        md += `---\n\n`;
-        questionIndex++;
+        md += `## User\n\n${msg.content.trim()}\n\n`;
       } else if (msg.role === 'ASSISTANT') {
-        const { thinking, response } = parseThinkingContent(msg.content);
-        md += `### 🤖 คำตอบ: **Zyntra AI Assistant**\n\n`;
-
-        if (thinking) {
-          md += `<details>\n<summary><b>🧠 กระบวนการคิดและวิเคราะห์ (Thinking Process)</b></summary>\n\n`;
-          md += `\`\`\`text\n${thinking.trim()}\n\`\`\`\n\n`;
-          md += `</details>\n\n`;
-        }
-
-        if (response) {
-          md += `${response.trim()}\n\n`;
-        }
-
-        if (msg.responseTime || msg.tokens) {
-          md += `\n*⏱️ เวลาตอบสนอง: ${msg.responseTime || '-'} | โควต้าที่ใช้: ${msg.tokens ? `${msg.tokens}%` : '2%'}*\n\n`;
-        }
-
+        const { response } = parseThinkingContent(msg.content);
+        const cleanContent = (response || msg.content).trim();
+        md += `## Assistant\n\n${cleanContent}\n\n`;
         md += `---\n\n`;
       }
     }
