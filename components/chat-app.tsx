@@ -45,12 +45,19 @@ import {
 } from 'lucide-react';
 
 type User = { id: string; name: string; email: string; role: string };
-type Chat = { id: string; title: string; pinned: boolean; favorite: boolean; updatedAt: Date };
+type Chat = {
+  id: string;
+  title: string;
+  pinned: boolean;
+  favorite: boolean;
+  updatedAt: Date;
+  messages?: Message[];
+};
 type Message = {
   id: string;
   role: string;
   content: string;
-  createdAt: string;
+  createdAt: string | Date;
   responseTime?: string;
   tokens?: number;
 };
@@ -216,7 +223,17 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [active, setActive] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
-  const cacheRef = useRef<Record<string, Message[]>>({});
+  const cacheRef = useRef<Record<string, Message[]>>((() => {
+    const initialMap: Record<string, Message[]> = {};
+    if (initialChats) {
+      for (const c of initialChats) {
+        if (c.messages) {
+          initialMap[c.id] = c.messages as any;
+        }
+      }
+    }
+    return initialMap;
+  })());
   const activeRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

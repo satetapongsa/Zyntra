@@ -31,8 +31,24 @@ export default async function Home() {
     db.chat.findMany({
       where: { userId: user.id },
       orderBy: [{ pinned: 'desc' }, { updatedAt: 'desc' }],
-      take: 100,
-      select: { id: true, title: true, pinned: true, favorite: true, updatedAt: true },
+      take: 40,
+      select: {
+        id: true,
+        title: true,
+        pinned: true,
+        favorite: true,
+        updatedAt: true,
+        messages: {
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            createdAt: true,
+            tokens: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     }),
     db.setting.findUnique({ where: { userId: user.id } }),
     db.message.aggregate({
