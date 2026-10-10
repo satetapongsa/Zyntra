@@ -255,6 +255,8 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
   const [showPresets, setShowPresets] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{ id: string; title: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [attachments, setAttachments] = useState<{ name: string; size: string; content: string }[]>([]);
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
 
@@ -378,12 +380,28 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     setAttachments([]);
   }
 
-  // Delete chat
-  async function remove(id: string) {
-    delete cacheRef.current[id];
-    await fetch(`/api/chat/${id}`, { method: 'DELETE' });
-    setChats((prev) => prev.filter((c) => c.id !== id));
-    if (active === id) newChat();
+  // Delete chat permanently from DB and state
+  async function confirmDeleteChat() {
+    if (!deleteModal || isDeleting) return;
+    setIsDeleting(true);
+    const idToDelete = deleteModal.id;
+    try {
+      delete cacheRef.current[idToDelete];
+      const res = await fetch(`/api/chat/${idToDelete}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error('Failed to delete chat');
+      }
+      setChats((prev) => prev.filter((c) => c.id !== idToDelete));
+      if (active === idToDelete) {
+        newChat();
+      }
+      setToast('ลบข้อมูลการสนทนานี้ออกจากฐานข้อมูลถาวรแล้ว');
+    } catch {
+      setToast('เกิดข้อผิดพลาดในการลบการสนทนา');
+    } finally {
+      setIsDeleting(false);
+      setDeleteModal(null);
+    }
   }
 
   // Update chat pin/fav
@@ -608,14 +626,40 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   }
 
   // Export entire chat as beautifully formatted Markdown (.md)
-  function exportChatMarkdown() {
-    if (messages.length === 0) {
-      setToast('ไม่มีข้อความให้ส่งออก');
+  async function exportChatMarkdown(targetChatId?: string) {
+    let targetMsgs = messages;
+    let title = 'บทสนทนา Zyntra';
+
+    if (targetChatId && targetChatId !== active) {
+      const c = chats.find((item) => item.id === targetChatId);
+      if (c?.title) title = c.title;
+
+      if (cacheRef.current[targetChatId] && cacheRef.current[targetChatId].length > 0) {
+        targetMsgs = cacheRef.current[targetChatId];
+      } else {
+        setToast('กำลังเตรียมข้อมูลแชทสำหรับการส่งออก…');
+        try {
+          const res = await fetch(`/api/chat/${targetChatId}`);
+          if (res.ok) {
+            const data = await res.json();
+            targetMsgs = data.chat?.messages || [];
+            if (data.chat?.title) title = data.chat.title;
+          }
+        } catch {
+          setToast('เกิดข้อผิดพลาดในการดึงข้อมูลแชท');
+          return;
+        }
+      }
+    } else {
+      const currentChat = active ? chats.find((c) => c.id === active) : null;
+      if (currentChat?.title) title = currentChat.title;
+    }
+
+    if (!targetMsgs || targetMsgs.length === 0) {
+      setToast('ไม่มีข้อความในการสนทนานี้ให้ส่งออก');
       return;
     }
 
-    const currentChat = active ? chats.find((c) => c.id === active) : null;
-    const title = currentChat?.title || 'บทสนทนา Zyntra';
     const safeFilename = `${title.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'chat'}.md`;
 
     const now = new Date();
@@ -625,24 +669,25 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       timeZone: 'Asia/Bangkok',
     }).format(now);
 
-    let md = `# ${title}\n\n`;
+    let md = `# ${title.toUpperCase()}\n\n`;
     md += `> **วันที่ส่งออก:** ${exportTimeStr} (GMT+7)\n`;
-    md += `> **ผู้ใช้:** ${user.name} (${user.email})\n`;
-    md += `> **ระบบ:** Zyntra AI Enterprise\n\n`;
+    md += `> **ผู้ใช้งาน:** ${user.name} (${user.email})\n`;
+    md += `> **โมเดลปัญญาประดิษฐ์:** Zyntra AI Enterprise\n\n`;
     md += `---\n\n`;
 
     let questionIndex = 1;
-    for (const msg of messages) {
+    for (const msg of targetMsgs) {
       if (msg.role === 'USER') {
-        md += `### 👤 คำถามที่ ${questionIndex}: ${user.name}\n\n`;
+        md += `### 👤 คำถามที่ ${questionIndex}: **${user.name}**\n\n`;
         md += `${msg.content.trim()}\n\n`;
+        md += `---\n\n`;
         questionIndex++;
       } else if (msg.role === 'ASSISTANT') {
         const { thinking, response } = parseThinkingContent(msg.content);
-        md += `### 🤖 คำตอบจาก Zyntra AI\n\n`;
+        md += `### 🤖 คำตอบ: **Zyntra AI Assistant**\n\n`;
 
         if (thinking) {
-          md += `<details>\n<summary><b>กระบวนการคิดและวิเคราะห์ (Thinking Process)</b></summary>\n\n`;
+          md += `<details>\n<summary><b>🧠 กระบวนการคิดและวิเคราะห์ (Thinking Process)</b></summary>\n\n`;
           md += `\`\`\`text\n${thinking.trim()}\n\`\`\`\n\n`;
           md += `</details>\n\n`;
         }
@@ -652,7 +697,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
         }
 
         if (msg.responseTime || msg.tokens) {
-          md += `*⏱️ เวลาตอบสนอง: ${msg.responseTime || '-'} | โควต้าที่ใช้: ${msg.tokens ? `${msg.tokens}%` : '2%'}*\n\n`;
+          md += `\n*⏱️ เวลาตอบสนอง: ${msg.responseTime || '-'} | โควต้าที่ใช้: ${msg.tokens ? `${msg.tokens}%` : '2%'}*\n\n`;
         }
 
         md += `---\n\n`;
@@ -831,25 +876,38 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   {c.pinned && <Pin size={12} className="mr-1 inline text-[#d2f36b]" />}
                   {c.title || 'New chat'}
                 </button>
-                <div className="hidden pr-2 group-hover:flex">
+                <div className="hidden pr-2 group-hover:flex items-center gap-0.5">
+                  <button
+                    title="Export as Markdown (.md)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportChatMarkdown(c.id);
+                    }}
+                    className="p-1 text-[#8a8d96] hover:text-[#d2f36b] transition"
+                  >
+                    <Download size={13} />
+                  </button>
                   <button
                     title="Pin"
                     onClick={() => updateChat(c.id, { pinned: !c.pinned })}
-                    className="p-1 text-[#8a8d96] hover:text-white"
+                    className="p-1 text-[#8a8d96] hover:text-white transition"
                   >
                     <Pin size={13} />
                   </button>
                   <button
                     title="Favorite"
                     onClick={() => updateChat(c.id, { favorite: !c.favorite })}
-                    className="p-1 text-[#8a8d96] hover:text-[#d2f36b]"
+                    className="p-1 text-[#8a8d96] hover:text-[#d2f36b] transition"
                   >
                     <Star size={13} fill={c.favorite ? 'currentColor' : 'none'} />
                   </button>
                   <button
                     title="Delete"
-                    onClick={() => remove(c.id)}
-                    className="p-1 text-[#8a8d96] hover:text-rose-400"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteModal({ id: c.id, title: c.title || 'New chat' });
+                    }}
+                    className="p-1 text-[#8a8d96] hover:text-rose-400 transition"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -972,19 +1030,15 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               <Sparkles size={13} className="text-[#d2f36b]" />
               <span className="hidden sm:inline">Prompt Library</span>
             </button>
-            {messages.length > 0 && (
-              <button
-                onClick={exportChatMarkdown}
-                className="flex items-center gap-1.5 rounded-lg border border-[#262831] bg-[#14151b] px-2.5 py-1.5 text-xs text-[#c4c6cf] hover:border-[#383a46] hover:bg-[#1a1c24] hover:text-white transition"
-                title="Export conversation as Markdown"
-              >
-                <Download size={13} />
-                <span className="hidden sm:inline">Export</span>
-              </button>
-            )}
-            <div className="ml-1 flex items-center gap-2 text-xs text-[#797c85]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#a4cb54]" /> Workspace
-            </div>
+            <button
+              onClick={() => exportChatMarkdown()}
+              disabled={!active && messages.length === 0}
+              className="flex items-center gap-1.5 rounded-lg border border-[#2d303a] bg-[#14151b] px-3 py-1.5 text-xs font-medium text-[#c4c6cf] hover:border-[#383a46] hover:bg-[#1a1c24] hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+              title="Export conversation as Markdown (.md)"
+            >
+              <Download size={13} className="text-[#d2f36b]" />
+              <span>Export</span>
+            </button>
           </div>
         </header>
 
@@ -1546,6 +1600,56 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
                   <p className="text-xs text-[#9598a4] leading-relaxed line-clamp-2">{preset.prompt}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Popup Modal */}
+      {deleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={() => !isDeleting && setDeleteModal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-[#2c2e39] bg-[#13141a] p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400">
+                <Trash2 size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-white">
+                  ยืนยันการลบการสนทนา
+                </h3>
+                <p className="mt-1 text-xs text-[#90939f] leading-relaxed break-words">
+                  คุณแน่ใจหรือไม่ว่าต้องการลบการสนทนา <strong className="text-[#f0f1f4]">"{deleteModal.title}"</strong> ?
+                </p>
+                <div className="mt-3 rounded-lg border border-rose-500/15 bg-rose-500/5 px-3 py-2 text-[12px] text-rose-300">
+                  ⚠️ ข้อมูลข้อความทั้งหมดในแชทนี้จะถูกลบออกจากฐานข้อมูลอย่างถาวร และไม่สามารถกู้คืนได้
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteModal(null)}
+                className="rounded-xl border border-[#2a2d36] bg-[#1a1c24] px-4 py-2 text-xs font-medium text-[#c4c6cf] hover:bg-[#22242e] hover:text-white transition disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDeleteChat}
+                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-rose-950/40 hover:bg-rose-500 transition disabled:opacity-50"
+              >
+                <Trash2 size={13} />
+                {isDeleting ? 'กำลังลบข้อมูล…' : 'ตกลง (ลบถาวร)'}
+              </button>
             </div>
           </div>
         </div>
