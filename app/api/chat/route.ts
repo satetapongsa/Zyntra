@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const { chatId, message } = chatSchema.parse(rawBody);
+    const { chatId, message, editMessageId } = chatSchema.parse(rawBody);
     const trimmedMessage = message.trim();
     const validChatId = chatId && chatId.trim() ? chatId.trim() : null;
 
@@ -145,18 +145,40 @@ export async function POST(req: NextRequest) {
     if (validChatId && !chat) return jsonError('Chat not found', 404);
     if (!chat) chat = await db.chat.create({ data: { userId: user.id, title: trimmedMessage.slice(0, 60) } });
 
-    // Only recall the last 3 questions and answers (max 6 messages)
-    const [rawPrior] = await Promise.all([
-      db.message.findMany({
-        where: { sessionId: chat.id },
-        orderBy: { createdAt: 'desc' },
-        take: 6,
-      }),
-    ]);
-    const prior = rawPrior.reverse();
+    if (editMessageId) {
+      // Find the user message to edit
+      const targetUserMsg = await db.message.findFirst({
+        where: { id: editMessageId, sessionId: chat.id, role: 'USER' },
+      });
 
-    // Persist user question
-    await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: trimmedMessage, tokens: 0 } });
+      if (targetUserMsg) {
+        // Delete any subsequent assistant messages or messages after this one
+        await db.message.deleteMany({
+          where: {
+            sessionId: chat.id,
+            createdAt: { gt: targetUserMsg.createdAt },
+          },
+        });
+        // Update the target user message content
+        await db.message.update({
+          where: { id: targetUserMsg.id },
+          data: { content: trimmedMessage },
+        });
+      }
+    } else {
+      // Persist user question for new messages
+      await db.message.create({ data: { sessionId: chat.id, role: 'USER', content: trimmedMessage, tokens: 0 } });
+    }
+
+    // Only recall the last 3 questions and answers (max 6 messages) excluding current question
+    const rawPrior = await db.message.findMany({
+      where: { sessionId: chat.id },
+      orderBy: { createdAt: 'desc' },
+      take: 7,
+    });
+    // Remove the current user message from prior
+    const sortedMessages = rawPrior.reverse();
+    const prior = sortedMessages.slice(0, -1);
 
     // Dynamic real-time date & time injection (Bangkok & UTC)
     const now = new Date();

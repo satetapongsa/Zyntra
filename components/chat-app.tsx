@@ -42,6 +42,7 @@ import {
   ChevronUp,
   FileCode,
   ArrowDown,
+  Pencil,
 } from 'lucide-react';
 
 type User = { id: string; name: string; email: string; role: string };
@@ -252,6 +253,8 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
   );
 
   const [feedback, setFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editInput, setEditInput] = useState('');
   const [showPresets, setShowPresets] = useState(false);
   const [attachments, setAttachments] = useState<{ name: string; size: string; content: string }[]>([]);
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
@@ -395,8 +398,8 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
     if (res.chats) setChats(res.chats);
   }
 
-  // Send message
-  async function send(text = input) {
+  // Send or edit message
+  async function send(text = input, editMessageId?: string) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
@@ -428,7 +431,7 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
 
     // Build final content combining attached documents if present
     let finalContent = trimmed;
-    if (attachments.length > 0) {
+    if (attachments.length > 0 && !editMessageId) {
       const docsSummary = attachments
         .map((a) => `[File Attachment: ${a.name}]\n\`\`\`\n${a.content}\n\`\`\``)
         .join('\n\n');
@@ -436,17 +439,11 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       setAttachments([]);
     }
 
-    setInput('');
-    const userMsgId = crypto.randomUUID();
+    if (!editMessageId) {
+      setInput('');
+    }
+    const userMsgId = editMessageId || crypto.randomUUID();
     const assistantMsgId = crypto.randomUUID();
-
-    const userMsg: Message = {
-      id: userMsgId,
-      role: 'USER',
-      content: finalContent,
-      createdAt: new Date().toISOString(),
-      tokens: 0,
-    };
 
     const assistantMsg: Message = {
       id: assistantMsgId,
@@ -456,19 +453,45 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
       tokens: isOpCommand ? 0 : 1,
     };
 
-    // Immediate UI update
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    if (editMessageId) {
+      // Find the index of the message being edited and replace messages from that point onward
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === editMessageId);
+        if (idx !== -1) {
+          const updatedUserMsg: Message = {
+            ...prev[idx],
+            content: finalContent,
+          };
+          return [...prev.slice(0, idx), updatedUserMsg, assistantMsg];
+        }
+        return prev;
+      });
+    } else {
+      const userMsg: Message = {
+        id: userMsgId,
+        role: 'USER',
+        content: finalContent,
+        createdAt: new Date().toISOString(),
+        tokens: 0,
+      };
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    }
+
     setLoading(true);
     abort.current = new AbortController();
 
-    // When user sends a message, smoothly scroll down once
+    // Smoothly scroll down
     setTimeout(() => scrollToBottom(true), 50);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: active || undefined, message: finalContent }),
+        body: JSON.stringify({
+          chatId: active || undefined,
+          message: finalContent,
+          editMessageId: editMessageId || undefined,
+        }),
         signal: abort.current.signal,
       });
 
@@ -994,203 +1017,246 @@ export default function ChatApp({ user, initialChats, settings, initialUsage }: 
               </div>
             ) : (
               <div className="space-y-6">
-                {messages.map((m) => (
-                  <article
-                    key={m.id}
-                    className={`fade-in flex gap-3.5 ${
-                      m.role === 'USER' ? 'flex-row-reverse' : 'flex-row'
-                    }`}
-                  >
-                    {/* Avatar */}
-                    <div
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold shadow-sm ${
-                        m.role === 'USER'
-                          ? 'bg-gradient-to-tr from-[#252830] to-[#343844] text-[#e8eaef] border border-[#3e4250]'
-                          : 'bg-[#151811] text-[#d2f36b] border border-[#2e3322]'
-                      }`}
-                    >
-                      {m.role === 'USER' ? user.name[0]?.toUpperCase() : <Sparkles size={14} className="text-[#d2f36b]" />}
-                    </div>
+                {(() => {
+                  // Find the ID of the latest USER message
+                  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'USER');
+                  const lastUserMsgId = lastUserMsg?.id;
 
-                    {/* Message Bubble Body */}
-                    <div
-                      className={`min-w-0 max-w-[85%] sm:max-w-[80%] ${
-                        m.role === 'USER'
-                          ? 'rounded-2xl rounded-tr-sm bg-[#1c1e25] border border-[#2a2c36] px-4 py-3 shadow-md'
-                          : 'flex-1'
-                      }`}
-                    >
-                      <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-[#838692]">
-                        <span>{m.role === 'USER' ? user.name : 'Zyntra v5'}</span>
-                        {m.role === 'ASSISTANT' && (
-                          <span className="rounded bg-[#1a1c22] px-1.5 py-0.5 text-[9px] font-semibold text-[#9da1ad] border border-[#272932]">
-                            ENTERPRISE AI
-                          </span>
-                        )}
-                      </div>
+                  return messages.map((m) => {
+                    const isLatestUserMessage = m.role === 'USER' && m.id === lastUserMsgId;
+                    const isEditingThis = editingMessageId === m.id;
 
-                      {(() => {
-                        if (!m.content) {
-                          return (
-                            <div className="flex items-center gap-2.5 py-2.5">
-                              <span className="text-xs text-[#9699a3]">Synthesizing response</span>
-                              <span className="flex gap-1.5">
-                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b]" />
-                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:150ms]" />
-                                <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:300ms]" />
-                              </span>
+                    return (
+                      <article
+                        key={m.id}
+                        className={`fade-in flex gap-3.5 ${
+                          m.role === 'USER' ? 'flex-row-reverse' : 'flex-row'
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold shadow-sm ${
+                            m.role === 'USER'
+                              ? 'bg-gradient-to-tr from-[#252830] to-[#343844] text-[#e8eaef] border border-[#3e4250]'
+                              : 'bg-[#151811] text-[#d2f36b] border border-[#2e3322]'
+                          }`}
+                        >
+                          {m.role === 'USER' ? user.name[0]?.toUpperCase() : <Sparkles size={14} className="text-[#d2f36b]" />}
+                        </div>
+
+                        {/* Message Bubble Body */}
+                        <div
+                          className={`min-w-0 max-w-[85%] sm:max-w-[80%] ${
+                            m.role === 'USER'
+                              ? 'rounded-2xl rounded-tr-sm bg-[#1c1e25] border border-[#2a2c36] px-4 py-3 shadow-md'
+                              : 'flex-1'
+                          }`}
+                        >
+                          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-medium text-[#838692]">
+                            <div className="flex items-center gap-2">
+                              <span>{m.role === 'USER' ? user.name : 'Zyntra v5'}</span>
+                              {m.role === 'ASSISTANT' && (
+                                <span className="rounded bg-[#1a1c22] px-1.5 py-0.5 text-[9px] font-semibold text-[#9da1ad] border border-[#272932]">
+                                  ENTERPRISE AI
+                                </span>
+                              )}
                             </div>
-                          );
-                        }
 
-                        if (m.role === 'ASSISTANT') {
-                          const { thinking, response, isThinkingFinished } = parseThinkingContent(m.content);
-                          const isExpanded = openThinking[m.id] ?? !isThinkingFinished;
+                            {/* Edit Pencil Button for Latest User Question */}
+                            {isLatestUserMessage && !isEditingThis && !loading && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingMessageId(m.id);
+                                  setEditInput(m.content);
+                                }}
+                                title="แก้ไขข้อความ"
+                                className="group relative flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[#8e929f] transition hover:bg-[#282a35] hover:text-[#d2f36b]"
+                              >
+                                <Pencil size={12} className="transition group-hover:scale-110" />
+                                <span className="hidden sm:inline">แก้ไขข้อความ</span>
+                              </button>
+                            )}
+                          </div>
 
-                          return (
-                            <div className="space-y-3">
-                              {/* Thinking Process Accordion Drawer */}
-                              {thinking && (
-                                <div className="overflow-hidden rounded-xl border border-[#2b2f21] bg-[#10130d] text-xs transition">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleThinking(m.id)}
-                                    className="flex w-full items-center justify-between px-3.5 py-2 font-medium text-[#c4de79] hover:bg-[#161a12] transition"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <Brain size={14} className="text-[#d2f36b]" />
-                                      <span>
-                                        Thinking Process {!isThinkingFinished && '(Analyzing...)'}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[#8f9a6e]">
-                                      <span>{isExpanded ? 'Hide' : 'Show steps'}</span>
-                                      {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                                    </div>
-                                  </button>
-                                  {isExpanded && (
-                                    <div className="border-t border-[#23271b] px-3.5 py-2.5 font-mono text-[11px] leading-relaxed text-[#a4af8a] whitespace-pre-wrap bg-[#0c0e09]/70">
-                                      {thinking}
+                          {(() => {
+                            if (!m.content) {
+                              return (
+                                <div className="flex items-center gap-2.5 py-2.5">
+                                  <span className="text-xs text-[#9699a3]">Synthesizing response</span>
+                                  <span className="flex gap-1.5">
+                                    <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b]" />
+                                    <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:150ms]" />
+                                    <i className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#d2f36b] [animation-delay:300ms]" />
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            if (m.role === 'ASSISTANT') {
+                              const { thinking, response, isThinkingFinished } = parseThinkingContent(m.content);
+                              const isExpanded = openThinking[m.id] ?? !isThinkingFinished;
+
+                              return (
+                                <div className="space-y-3">
+                                  {/* Thinking Process Accordion Drawer */}
+                                  {thinking && (
+                                    <div className="overflow-hidden rounded-xl border border-[#2b2f21] bg-[#10130d] text-xs transition">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleThinking(m.id)}
+                                        className="flex w-full items-center justify-between px-3.5 py-2 font-medium text-[#c4de79] hover:bg-[#161a12] transition"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <Brain size={14} className="text-[#d2f36b]" />
+                                          <span>
+                                            Thinking Process {!isThinkingFinished && '(Analyzing...)'}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[#8f9a6e]">
+                                          <span>{isExpanded ? 'Hide' : 'Show steps'}</span>
+                                          {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                        </div>
+                                      </button>
+                                      {isExpanded && (
+                                        <div className="border-t border-[#23271b] px-3.5 py-2.5 font-mono text-[11px] leading-relaxed text-[#a4af8a] whitespace-pre-wrap bg-[#0c0e09]/70">
+                                          {thinking}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
-                                </div>
-                              )}
 
-                              {/* Main Response Markdown */}
-                              {response ? (
-                                <div className="prose text-[14px] leading-relaxed text-[#e1e2e7]">
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    components={{
-                                      code: CodeBlock,
+                                  {/* Main Response Markdown */}
+                                  {response ? (
+                                    <div className="prose text-[14px] leading-relaxed text-[#e1e2e7]">
+                                      <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{
+                                          code: CodeBlock,
+                                        }}
+                                      >
+                                        {response}
+                                      </ReactMarkdown>
+                                    </div>
+                                  ) : !isThinkingFinished ? (
+                                    <div className="flex items-center gap-2 py-1 text-xs text-[#9699a3]">
+                                      <Brain size={13} className="text-[#d2f36b] animate-pulse" />
+                                      <span>Reasoning in progress...</span>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            }
+
+                            // User message - In-place editing mode
+                            if (isEditingThis) {
+                              return (
+                                <div className="mt-2 space-y-2.5">
+                                  <textarea
+                                    value={editInput}
+                                    onChange={(e) => setEditInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        if (editInput.trim() && !loading) {
+                                          const newText = editInput.trim();
+                                          setEditingMessageId(null);
+                                          send(newText, m.id);
+                                        }
+                                      } else if (e.key === 'Escape') {
+                                        setEditingMessageId(null);
+                                      }
                                     }}
-                                  >
-                                    {response}
-                                  </ReactMarkdown>
+                                    rows={Math.min(6, Math.max(2, editInput.split('\n').length))}
+                                    className="w-full rounded-xl border border-[#3b3e4f] bg-[#14151b] p-3 text-[14px] text-white outline-none focus:border-[#d2f36b] transition"
+                                    placeholder="แก้ไขคำถาม..."
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingMessageId(null)}
+                                      className="rounded-lg border border-[#303340] bg-[#1a1c24] px-3 py-1.5 text-xs font-medium text-[#a0a4b3] hover:bg-[#222530] hover:text-white transition"
+                                    >
+                                      ยกเลิก
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (editInput.trim() && !loading) {
+                                          const newText = editInput.trim();
+                                          setEditingMessageId(null);
+                                          send(newText, m.id);
+                                        }
+                                      }}
+                                      disabled={loading || !editInput.trim()}
+                                      className="rounded-lg bg-[#d2f36b] px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-[#bce055] transition disabled:opacity-50"
+                                    >
+                                      บันทึกและส่ง
+                                    </button>
+                                  </div>
                                 </div>
-                              ) : !isThinkingFinished ? (
-                                <div className="flex items-center gap-2 py-1 text-xs text-[#9699a3]">
-                                  <Brain size={13} className="text-[#d2f36b] animate-pulse" />
-                                  <span>Reasoning in progress...</span>
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        }
+                              );
+                            }
 
-                        // User message
-                        return (
-                          <div className="prose text-[14px] leading-relaxed text-[#f0f1f4]">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                code: CodeBlock,
-                              }}
-                            >
-                              {m.content}
-                            </ReactMarkdown>
-                          </div>
-                        );
-                      })()}
+                            // User message - Normal display
+                            return (
+                              <div className="prose text-[14px] leading-relaxed text-[#f0f1f4]">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    code: CodeBlock,
+                                  }}
+                                >
+                                  {m.content}
+                                </ReactMarkdown>
+                              </div>
+                            );
+                          })()}
 
-                      {/* Assistant Telemetry & Enterprise Action Bar */}
-                      {m.role === 'ASSISTANT' && m.content && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#1d1f27] pt-2.5">
-                          {m.responseTime && (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
-                              <Clock size={11} className="text-[#d2f36b]" />
-                              {m.responseTime}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
-                            <Zap size={11} className="text-[#d2f36b]" />
-                            {typeof m.tokens === 'number'
-                              ? `${Math.max(1, Math.round((m.tokens / usage.limit) * 100))}%`
-                              : '2%'}
-                          </span>
-
-                          <div className="flex items-center gap-1 ml-auto">
-                            {/* Copy button */}
-                            <button
-                              onClick={() => copyText(m.id, m.content)}
-                              title="Copy response"
-                              className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-[#838692] hover:border-[#272933] hover:bg-[#181a21] hover:text-[#d3d4d8] transition"
-                            >
-                              {copiedId === m.id ? (
-                                <>
-                                  <Check size={12} className="text-[#d2f36b]" />
-                                  <span className="text-[#d2f36b]">Copied</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy size={12} />
-                                  <span>Copy</span>
-                                </>
+                          {/* Assistant Telemetry & Clean Action Bar (Copy only, no Retry or Like/Dislike) */}
+                          {m.role === 'ASSISTANT' && m.content && (
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#1d1f27] pt-2.5">
+                              {m.responseTime && (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
+                                  <Clock size={11} className="text-[#d2f36b]" />
+                                  {m.responseTime}
+                                </span>
                               )}
-                            </button>
+                              <span className="inline-flex items-center gap-1 rounded-md border border-[#232530] bg-[#121318] px-2 py-0.5 text-[11px] text-[#8e929f]">
+                                <Zap size={11} className="text-[#d2f36b]" />
+                                {typeof m.tokens === 'number'
+                                  ? `${Math.max(1, Math.round((m.tokens / usage.limit) * 100))}%`
+                                  : '2%'}
+                              </span>
 
-                            {/* Regenerate button */}
-                            <button
-                              onClick={regenerateLast}
-                              disabled={loading}
-                              title="Regenerate response"
-                              className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-[#838692] hover:border-[#272933] hover:bg-[#181a21] hover:text-[#d3d4d8] disabled:opacity-40 transition"
-                            >
-                              <RotateCcw size={12} />
-                              <span className="hidden sm:inline">Retry</span>
-                            </button>
-
-                            {/* Thumbs up */}
-                            <button
-                              onClick={() => toggleFeedback(m.id, 'like')}
-                              title="Helpful response"
-                              className={`rounded-md p-1.5 text-xs transition ${
-                                feedback[m.id] === 'like'
-                                  ? 'bg-[#1b2210] text-[#d2f36b] border border-[#343e1d]'
-                                  : 'text-[#777983] hover:bg-[#181a21] hover:text-white'
-                              }`}
-                            >
-                              <ThumbsUp size={12} fill={feedback[m.id] === 'like' ? 'currentColor' : 'none'} />
-                            </button>
-
-                            {/* Thumbs down */}
-                            <button
-                              onClick={() => toggleFeedback(m.id, 'dislike')}
-                              title="Needs improvement"
-                              className={`rounded-md p-1.5 text-xs transition ${
-                                feedback[m.id] === 'dislike'
-                                  ? 'bg-[#2b1619] text-rose-400 border border-[#482025]'
-                                  : 'text-[#777983] hover:bg-[#181a21] hover:text-white'
-                              }`}
-                            >
-                              <ThumbsDown size={12} fill={feedback[m.id] === 'dislike' ? 'currentColor' : 'none'} />
-                            </button>
-                          </div>
+                              <div className="flex items-center gap-1 ml-auto">
+                                {/* Copy button */}
+                                <button
+                                  onClick={() => copyText(m.id, m.content)}
+                                  title="Copy response"
+                                  className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-[#838692] hover:border-[#272933] hover:bg-[#181a21] hover:text-[#d3d4d8] transition"
+                                >
+                                  {copiedId === m.id ? (
+                                    <>
+                                      <Check size={12} className="text-[#d2f36b]" />
+                                      <span className="text-[#d2f36b]">Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy size={12} />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      </article>
+                    );
+                  });
+                })()}
               </div>
             )}
             <div ref={bottom} />
